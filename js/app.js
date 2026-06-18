@@ -534,6 +534,7 @@ const FollowupCreation = {
       if (!this.patient||!this.patient.dob) return [];
       return groupVaccinesByAge(IAP_VACCINES,this.patient.dob);
     },
+    vaccineCount() { return IAP_VACCINES.length; },
     postProcedureDueDate() {
       if (this.form.reviewDays==='custom') return this.form.customDate;
       return addDays(todayIso(),parseInt(this.form.reviewDays));
@@ -693,7 +694,7 @@ const FollowupCreation = {
               <template v-if="followupType==='vaccination'">
                 <p class="form-section-title">Vaccination schedule</p>
                 <div v-if="patient.dob">
-                  <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">{{ IAP_VACCINES.length }} vaccines will be scheduled from DOB {{ fmtDate(patient.dob) }}:</p>
+                  <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">{{ vaccineCount }} vaccines will be scheduled from DOB {{ fmtDate(patient.dob) }}:</p>
                   <div class="vaccine-age-group" v-for="g in vaccineGroups" :key="g.ageLabel">
                     <div class="vaccine-age-label">{{ g.ageLabel }}</div>
                     <div class="vaccine-age-date">{{ fmtDate(g.dueDate) }}</div>
