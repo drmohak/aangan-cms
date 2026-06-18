@@ -1,16 +1,14 @@
 // ================================================================
-//  FIREBASE CONFIGURATION
-//  Replace every placeholder value with your real Firebase config.
-//  Firebase Console → Project Settings → Your Apps → SDK setup
+//  FIREBASE CONFIGURATION — Aangan Clinic
 // ================================================================
 
 const firebaseConfig = {
-  apiKey:            "REPLACE_WITH_YOUR_API_KEY",
-  authDomain:        "REPLACE_WITH_YOUR_PROJECT_ID.firebaseapp.com",
-  projectId:         "REPLACE_WITH_YOUR_PROJECT_ID",
-  storageBucket:     "REPLACE_WITH_YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "REPLACE_WITH_YOUR_SENDER_ID",
-  appId:             "REPLACE_WITH_YOUR_APP_ID"
+  apiKey:            "AIzaSyCXVLTCouhh_E9BiJeXsjZJjidHS4gS9HY",
+  authDomain:        "aangan-85dc2.firebaseapp.com",
+  projectId:         "aangan-85dc2",
+  storageBucket:     "aangan-85dc2.firebasestorage.app",
+  messagingSenderId: "658696064194",
+  appId:             "1:658696064194:web:b02f0cf03fa308e8bdff5b"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -18,16 +16,6 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
 // ----------------------------------------------------------------
-//  NOTE FOR DEVELOPMENT
-//  Set Firestore security rules to allow all reads and writes
-//  while building. Replace with proper rules before going live.
-//
-//  rules_version = '2';
-//  service cloud.firestore {
-//    match /databases/{database}/documents {
-//      match /{document=**} {
-//        allow read, write: if true;
-//      }
-//    }
-//  }
+//  Firestore rules in production mode:
+//  allow read, write: if request.auth != null;
 // ----------------------------------------------------------------
