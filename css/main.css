@@ -1023,3 +1023,26 @@ button { font-family: inherit; cursor: pointer; }
 .reminder-info   { flex: 1; min-width: 120px; }
 .reminder-date   { font-size: 12px; font-weight: 500; color: var(--text-primary); }
 .reminder-meta   { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+/* -----------------------------------------------
+   STEP 7: WORK QUEUE STYLES
+----------------------------------------------- */
+
+.avatar-red { background: var(--red-light); color: var(--red-dark); }
+
+.card-list-row {
+  display: flex;
+  align-items: center;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  gap: 9px;
+  flex-wrap: wrap;
+}
+.card-list-row:last-child { border-bottom: none; }
+
+.row-more {
+  padding: 8px 12px;
+  text-align: center;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}

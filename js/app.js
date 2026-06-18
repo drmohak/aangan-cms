@@ -968,12 +968,222 @@ const FollowupDetail = {
 
 const WorkQueue = {
   name: 'WorkQueue',
-  computed: { todayLabel() { return new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'}); } },
+  data() {
+    return {
+      loading: true, loadError: null,
+      reminders: [], missed: [], highRisk: [],
+      lastRefreshed: null,
+      showAllReminders: false, showAllMissed: false
+    };
+  },
+  computed: {
+    todayLabel() {
+      return new Date().toLocaleDateString('en-IN', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+      });
+    },
+    totalTasks()       { return this.reminders.length + this.missed.length + this.highRisk.length; },
+    visibleReminders() { return this.showAllReminders ? this.reminders : this.reminders.slice(0, 5); },
+    visibleMissed()    { return this.showAllMissed    ? this.missed    : this.missed.slice(0, 5); }
+  },
+  methods: {
+    async loadQueue() {
+      this.loading = true; this.loadError = null;
+      try {
+        const [reminders, allMissed] = await Promise.all([
+          getTodaysPendingReminders(),
+          getMissedFollowups()
+        ]);
+        this.reminders = reminders;
+        const withDays = allMissed.map(fc => ({ ...fc, _daysOver: this.daysOver(fc.dueDate) }));
+        this.missed    = withDays.filter(fc => fc._daysOver < 7);
+        this.highRisk  = withDays.filter(fc => fc._daysOver >= 7)
+                                 .sort((a, b) => b._daysOver - a._daysOver);
+        this.lastRefreshed = new Date().toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+      } catch(e) {
+        this.loadError = 'Could not load work queue. Check your connection.';
+      } finally { this.loading = false; }
+    },
+    async markSent(reminder) {
+      try {
+        await updateReminderStatus(reminder.id, 'sent');
+        this.reminders = this.reminders.filter(r => r.id !== reminder.id);
+      } catch(e) { alert('Error marking as sent.'); }
+    },
+    async markSkipped(reminder) {
+      try {
+        await updateReminderStatus(reminder.id, 'skipped');
+        this.reminders = this.reminders.filter(r => r.id !== reminder.id);
+      } catch(e) { alert('Error.'); }
+    },
+    daysOver(dueDate) {
+      if (!dueDate) return 0;
+      const [y1,m1,d1] = todayIso().split('-').map(Number);
+      const [y2,m2,d2] = dueDate.split('-').map(Number);
+      return Math.max(0, Math.floor(
+        (new Date(y1,m1-1,d1) - new Date(y2,m2-1,d2)) / 86400000
+      ));
+    },
+    waLink(r)          { return buildReminderWaLink(r); },
+    initials(name)     { return patientInitials(name); },
+    avCls(name, risk)  {
+      if (risk === 'high')   return 'avatar-red';
+      if (risk === 'missed') return 'avatar-amber';
+      return patientAvatarClass(name);
+    },
+    fmtDate(d)         { return fmtDateShort(d); },
+    typePillText(t)    {
+      return { anc:'ANC', vaccination:'Vaccine', post_procedure:'Post-op', annual_recall:'Recall' }[t] || 'Follow-up';
+    },
+    typePillCls(t)     {
+      return { anc:'pill-teal', vaccination:'pill-blue', post_procedure:'pill-gray', annual_recall:'pill-gray' }[t] || 'pill-gray';
+    },
+    overdueText(d)     { return d === 1 ? '1 day over' : d + ' days over'; }
+  },
+  mounted() { this.loadQueue(); },
   template: `
     <div class="screen">
-      <div class="topbar"><div class="topbar-left"><h1>Today\u2019s work queue</h1><p>{{ todayLabel }}</p></div><div class="topbar-right"><button class="btn btn-primary" @click="$router.push('/patients/new')"><i class="ti ti-user-plus"></i> New patient</button></div></div>
-      <div class="content"><div class="placeholder-screen"><i class="ti ti-layout-list"></i><h2>Work queue</h2><p class="sub">Reminders, missed follow-ups, overdue patients</p><p class="step">Step 7 of the build plan</p></div></div>
-    </div>`
+      <div class="topbar">
+        <div class="topbar-left">
+          <h1>Today\u2019s work queue</h1>
+          <p>{{ todayLabel }}</p>
+        </div>
+        <div class="topbar-right">
+          <button class="btn btn-secondary btn-sm" @click="loadQueue" :disabled="loading">
+            <i class="ti ti-refresh"></i> Refresh
+          </button>
+          <button class="btn btn-primary" @click="$router.push('/patients/new')">
+            <i class="ti ti-user-plus"></i> New patient
+          </button>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="loading-wrap" v-if="loading"><i class="ti ti-loader spin"></i> Loading queue\u2026</div>
+        <div class="empty-section" v-else-if="loadError">
+          <i class="ti ti-alert-triangle"></i><p>{{ loadError }}</p>
+          <button class="btn btn-secondary" style="margin-top:14px" @click="loadQueue">Try again</button>
+        </div>
+
+        <template v-else>
+          <div class="stat-grid">
+            <div class="stat-card stat-teal">
+              <div class="stat-label">Reminders due</div>
+              <div class="stat-value">{{ reminders.length }}</div>
+            </div>
+            <div class="stat-card stat-amber">
+              <div class="stat-label">Missed follow-ups</div>
+              <div class="stat-value">{{ missed.length }}</div>
+            </div>
+            <div class="stat-card stat-red">
+              <div class="stat-label">Overdue 7+ days</div>
+              <div class="stat-value">{{ highRisk.length }}</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Last refreshed</div>
+              <div class="stat-value" style="font-size:14px;color:var(--text-secondary)">{{ lastRefreshed || '\u2014' }}</div>
+            </div>
+          </div>
+
+          <div class="empty-section" v-if="totalTasks === 0" style="padding:60px 20px">
+            <i class="ti ti-circle-check" style="font-size:40px;color:var(--teal-mid);opacity:.7"></i>
+            <h2 style="color:var(--teal-mid);font-size:18px;margin-top:8px">All clear</h2>
+            <p>No pending reminders or missed follow-ups for today</p>
+          </div>
+
+          <template v-else>
+
+            <template v-if="reminders.length > 0">
+              <div class="section-header">
+                <div class="section-title">
+                  <i class="ti ti-brand-whatsapp" style="color:var(--teal-mid)"></i>
+                  Reminders to send
+                </div>
+                <div class="section-count">{{ reminders.length }} pending</div>
+              </div>
+              <div class="card-list" style="margin-bottom:18px">
+                <div class="card-list-row" v-for="r in visibleReminders" :key="r.id">
+                  <div class="avatar avatar-sm" :class="avCls(r.patientName, 'reminder')">{{ initials(r.patientName) }}</div>
+                  <div class="row-info">
+                    <div class="row-name">{{ r.patientName }}</div>
+                    <div class="row-detail">{{ r.subType }} &middot; due {{ fmtDate(r.dueDate) }}</div>
+                  </div>
+                  <span class="pill" :class="typePillCls(r.followupType)" style="flex-shrink:0">{{ typePillText(r.followupType) }}</span>
+                  <a v-if="waLink(r)" :href="waLink(r)" target="_blank" class="action-btn action-btn-wa">
+                    <i class="ti ti-brand-whatsapp"></i> Send
+                  </a>
+                  <span v-else class="pill pill-gray" style="font-size:10px" title="No WA consent or mobile">No WA</span>
+                  <button class="action-btn action-btn-call" @click="markSent(r)">
+                    <i class="ti ti-check"></i> Sent
+                  </button>
+                  <button class="action-btn" style="border-color:var(--border-mid);color:var(--text-muted)" @click="markSkipped(r)">
+                    Skip
+                  </button>
+                </div>
+                <div class="row-more" v-if="reminders.length > 5">
+                  <button style="background:none;border:none;font-size:12px;color:var(--teal-mid);cursor:pointer" @click="showAllReminders=!showAllReminders">
+                    {{ showAllReminders ? 'Show less' : '+ ' + (reminders.length - 5) + ' more reminders' }}
+                  </button>
+                </div>
+              </div>
+            </template>
+
+            <template v-if="missed.length > 0">
+              <div class="section-header">
+                <div class="section-title">
+                  <i class="ti ti-phone" style="color:var(--amber-mid)"></i>
+                  Missed follow-ups \u2014 call today
+                </div>
+                <div class="section-count">{{ missed.length }} patients</div>
+              </div>
+              <div class="card-list" style="margin-bottom:18px">
+                <div class="card-list-row" v-for="fc in visibleMissed" :key="fc.id">
+                  <div class="avatar avatar-sm avatar-amber">{{ initials(fc.patientName) }}</div>
+                  <div class="row-info">
+                    <div class="row-name">{{ fc.patientName }}</div>
+                    <div class="row-detail">{{ fc.subType }} &middot; was due {{ fmtDate(fc.dueDate) }}</div>
+                  </div>
+                  <span class="pill pill-amber" style="flex-shrink:0">{{ overdueText(fc._daysOver) }}</span>
+                  <button class="action-btn action-btn-call" @click="$router.push('/followups/'+fc.id)">
+                    <i class="ti ti-arrow-right"></i> View
+                  </button>
+                </div>
+                <div class="row-more" v-if="missed.length > 5">
+                  <button style="background:none;border:none;font-size:12px;color:var(--teal-mid);cursor:pointer" @click="showAllMissed=!showAllMissed">
+                    {{ showAllMissed ? 'Show less' : '+ ' + (missed.length - 5) + ' more patients' }}
+                  </button>
+                </div>
+              </div>
+            </template>
+
+            <template v-if="highRisk.length > 0">
+              <div class="section-header">
+                <div class="section-title">
+                  <i class="ti ti-alert-triangle" style="color:var(--red-mid)"></i>
+                  High-risk overdue
+                </div>
+                <div class="section-count">{{ highRisk.length }} patients &middot; 7+ days</div>
+              </div>
+              <div class="card-list">
+                <div class="card-list-row" v-for="fc in highRisk" :key="fc.id">
+                  <div class="avatar avatar-sm avatar-red">{{ initials(fc.patientName) }}</div>
+                  <div class="row-info">
+                    <div class="row-name">{{ fc.patientName }}</div>
+                    <div class="row-detail">{{ fc.subType }} &middot; was due {{ fmtDate(fc.dueDate) }}</div>
+                  </div>
+                  <span class="pill pill-red" style="flex-shrink:0">{{ overdueText(fc._daysOver) }}</span>
+                  <button class="action-btn action-btn-flag" @click="$router.push('/followups/'+fc.id)">
+                    <i class="ti ti-flag"></i> Escalate
+                  </button>
+                </div>
+              </div>
+            </template>
+
+          </template>
+        </template>
+      </div>
+    </div>
+  `
 };
 
 const FollowupList = {
