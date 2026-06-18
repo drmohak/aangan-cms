@@ -112,3 +112,53 @@ async function updatePatient(id, formData) {
   await db.collection('patients').doc(id).update(data);
   return { id, ...data };
 }
+
+// ================================================================
+//  STEP 4: CHILD MODULE
+// ================================================================
+
+async function generateChildId() {
+  const counterRef = db.collection('meta').doc('counters');
+  let newSerial;
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(counterRef);
+    if (!snap.exists) {
+      newSerial = 1;
+      tx.set(counterRef, { childSerial: 1 });
+    } else {
+      newSerial = (snap.data().childSerial || 0) + 1;
+      tx.update(counterRef, {
+        childSerial: firebase.firestore.FieldValue.increment(1)
+      });
+    }
+  });
+  return 'C-' + String(newSerial).padStart(4, '0');
+}
+
+async function createChild(motherId, formData, mother) {
+  const patientId = await generateChildId();
+  const data = {
+    patientId,
+    name:             formData.name.trim(),
+    dob:              formData.dob         || null,
+    gender:           formData.gender      || null,
+    birthWeight:      formData.birthWeight ? parseFloat(formData.birthWeight) : null,
+    motherId,
+    motherName:       mother ? mother.name        : null,
+    motherPatientId:  mother ? mother.patientId   : null,
+    mobile:           mother ? mother.mobile       : null,
+    waConsent:        mother ? !!mother.waConsent  : false,
+    type:             'child',
+    nameLower:        formData.name.trim().toLowerCase(),
+    createdAt:        firebase.firestore.FieldValue.serverTimestamp()
+  };
+  const ref = await db.collection('patients').add(data);
+  return { id: ref.id, ...data };
+}
+
+async function getChildrenByMother(motherId) {
+  const snap = await db.collection('patients')
+    .where('motherId', '==', motherId)
+    .get();
+  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}

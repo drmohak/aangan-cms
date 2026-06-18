@@ -766,3 +766,56 @@ button { font-family: inherit; cursor: pointer; }
   font-family: inherit;
 }
 .sign-out-btn:hover { background: #f5f5f5; }
+
+/* -----------------------------------------------
+   STEP 4: CHILD MODULE STYLES
+----------------------------------------------- */
+
+/* Mother context banner (child registration form) */
+.mother-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--teal-light);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--teal-dark);
+  margin-bottom: 4px;
+}
+
+/* Child card (inside mother's profile) */
+.child-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.child-card:last-child { border-bottom: none; }
+.child-card:hover      { background: #fafafa; }
+.child-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.child-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* Mother link card (inside child's profile) */
+.mother-link-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.mother-link-card:hover { border-color: var(--teal-border); }
+.mother-link-label { font-size: 11px; color: var(--text-muted); }
+.mother-link-name  { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-top: 1px; }
+
+/* Gender pills */
+.pill-pink { background: #FCE7F3; color: #9D174D; }
+.pill-sky  { background: #E0F2FE; color: #075985; }
