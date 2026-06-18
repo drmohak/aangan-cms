@@ -819,3 +819,177 @@ button { font-family: inherit; cursor: pointer; }
 /* Gender pills */
 .pill-pink { background: #FCE7F3; color: #9D174D; }
 .pill-sky  { background: #E0F2FE; color: #075985; }
+
+/* -----------------------------------------------
+   STEP 5: FOLLOW-UP MODULE STYLES
+----------------------------------------------- */
+
+/* Follow-up type selector grid */
+.type-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.type-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px 12px;
+  border: 1px solid var(--border-mid);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+.type-btn i        { font-size: 22px; }
+.type-btn:hover    { border-color: var(--teal-border); color: var(--teal-dark); }
+.type-btn.on       { border-color: var(--teal-border); background: var(--teal-light); color: var(--teal-dark); font-weight: 500; }
+.type-btn.disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+
+/* Patient context banner (in follow-up creation) */
+.patient-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 20px;
+}
+.patient-banner-name { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.patient-banner-id   { font-size: 12px; color: var(--text-muted); }
+
+/* Patient search in follow-up creation */
+.patient-search-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.patient-search-result:last-child { border-bottom: none; }
+.patient-search-result:hover { background: #fafafa; }
+
+/* ANC preview list */
+.anc-preview { margin-top: 12px; }
+.anc-row {
+  display: flex;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  gap: 10px;
+}
+.anc-row:last-child    { border-bottom: none; }
+.anc-row .week-label   { font-weight: 500; color: var(--text-primary); width: 70px; flex-shrink: 0; }
+.anc-row .due-date     { color: var(--text-secondary); flex: 1; }
+.anc-row.past          { opacity: 0.45; }
+
+/* Vaccine preview grouped list */
+.vaccine-age-group     { margin-bottom: 12px; }
+.vaccine-age-label     { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; }
+.vaccine-age-date      { font-size: 11px; color: var(--teal-mid); margin-bottom: 5px; }
+.vaccine-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 3px 0;
+}
+.vaccine-row i         { font-size: 12px; color: var(--teal-border); }
+
+/* EDD display */
+.edd-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--teal-light);
+  color: var(--teal-dark);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 8px;
+  margin: 4px 0 16px;
+}
+
+/* Follow-up case card (in patient profile) */
+.followup-case-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.followup-case-card:last-child { border-bottom: none; }
+.followup-case-card:hover      { background: #fafafa; }
+.fc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+.fc-dot-anc         { background: var(--teal-mid); }
+.fc-dot-vaccination { background: var(--blue-mid); }
+.fc-dot-post        { background: var(--amber-mid); }
+.fc-dot-recall      { background: #7C3AED; }
+.fc-dot-overdue     { background: var(--red-mid); }
+.fc-dot-completed   { background: #B4B2A9; }
+.fc-info            { flex: 1; min-width: 0; }
+.fc-subtype         { font-size: 12px; font-weight: 500; color: var(--text-primary); }
+.fc-meta            { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.fc-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  font-weight: 500;
+}
+.fc-badge-overdue   { background: var(--red-light);   color: var(--red-dark); }
+.fc-badge-today     { background: var(--amber-light);  color: var(--amber-dark); }
+.fc-badge-upcoming  { background: var(--teal-light);   color: var(--teal-dark); }
+.fc-badge-completed { background: #f0f0f0;             color: #666; }
+
+/* Follow-up detail screen */
+.detail-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.detail-type-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.detail-type-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.detail-type-anc        { background: var(--teal-light);  color: var(--teal-dark); }
+.detail-type-vaccination{ background: var(--blue-light);  color: var(--blue-dark); }
+.detail-type-post       { background: var(--amber-light); color: var(--amber-dark); }
+.detail-type-recall     { background: #EDE9FE;            color: #5B21B6; }
+.detail-subtype { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.detail-patient { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
