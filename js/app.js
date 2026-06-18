@@ -782,36 +782,90 @@ const FollowupCreation = {
 };
 
 // ================================================================
-//  STEP 5: FOLLOW-UP DETAIL  (basic view)
+//  STEP 6: FOLLOW-UP DETAIL  (with reminder engine)
 // ================================================================
 
 const FollowupDetail = {
   name: 'FollowupDetail',
-  data() { return { fc:null, loading:true, loadError:null, updating:false }; },
+  data() {
+    return {
+      fc: null, loading: true, loadError: null, updating: false,
+      reminders: [], loadingReminders: false,
+      patient: null
+    };
+  },
   computed: {
     typeIcon() {
-      const m={anc:'ti-heart-rate-monitor',vaccination:'ti-vaccine',post_procedure:'ti-surgical-tape',annual_recall:'ti-calendar-repeat'};
-      return this.fc?'ti '+( m[this.fc.followupType]||'ti-calendar-check'):'';
+      const m = { anc:'ti-heart-rate-monitor', vaccination:'ti-vaccine', post_procedure:'ti-surgical-tape', annual_recall:'ti-calendar-repeat' };
+      return this.fc ? 'ti ' + (m[this.fc.followupType] || 'ti-calendar-check') : '';
     },
     typeCls() {
-      const m={anc:'detail-type-anc',vaccination:'detail-type-vaccination',post_procedure:'detail-type-post',annual_recall:'detail-type-recall'};
-      return this.fc?'detail-type-icon '+(m[this.fc.followupType]||'detail-type-anc'):'detail-type-icon';
+      const m = { anc:'detail-type-anc', vaccination:'detail-type-vaccination', post_procedure:'detail-type-post', annual_recall:'detail-type-recall' };
+      return this.fc ? 'detail-type-icon ' + (m[this.fc.followupType] || 'detail-type-anc') : 'detail-type-icon';
     },
-    badge() { return this.fc?fcBadge(this.fc):{text:'',cls:''}; },
-    fmtDue() { return this.fc?fmtDateShort(this.fc.dueDate):'\u2014'; }
+    badge()   { return this.fc ? fcBadge(this.fc) : { text:'', cls:'' }; },
+    fmtDue()  { return this.fc ? fmtDateShort(this.fc.dueDate) : '\u2014'; },
+    today()   { return todayIso(); },
+    pendingReminders()   { return this.reminders.filter(r => r.status === 'pending'); },
+    actionableReminders(){ return this.reminders.filter(r => r.status === 'pending' && r.reminderDate <= this.today); },
+    hasReminders()       { return this.reminders.length > 0; }
   },
   methods: {
     async load() {
-      this.loading=true; this.loadError=null;
-      try { this.fc=await getFollowupCase(this.$route.params.id); if(!this.fc) this.loadError='Follow-up case not found.'; }
-      catch(e) { this.loadError='Could not load follow-up.'; }
-      finally { this.loading=false; }
+      this.loading = true; this.loadError = null;
+      try {
+        this.fc = await getFollowupCase(this.$route.params.id);
+        if (!this.fc) { this.loadError = 'Follow-up case not found.'; return; }
+        this.patient = await getPatient(this.fc.patientDocId);
+        await this.loadReminders();
+      } catch(e) { this.loadError = 'Could not load follow-up.'; }
+      finally { this.loading = false; }
+    },
+    async loadReminders() {
+      this.loadingReminders = true;
+      try { this.reminders = await getReminderTasksForCase(this.fc.id); }
+      finally { this.loadingReminders = false; }
     },
     async markStatus(status) {
-      this.updating=true;
-      try { await updateFollowupStatus(this.fc.id,status); this.fc.status=status; }
+      this.updating = true;
+      try { await updateFollowupStatus(this.fc.id, status); this.fc.status = status; }
       catch(e) { alert('Error updating status.'); }
-      finally { this.updating=false; }
+      finally { this.updating = false; }
+    },
+    async markReminderSent(taskId) {
+      try {
+        await updateReminderStatus(taskId, 'sent');
+        const t = this.reminders.find(r => r.id === taskId);
+        if (t) t.status = 'sent';
+      } catch(e) { alert('Error updating reminder.'); }
+    },
+    async markReminderSkipped(taskId) {
+      try {
+        await updateReminderStatus(taskId, 'skipped');
+        const t = this.reminders.find(r => r.id === taskId);
+        if (t) t.status = 'skipped';
+      } catch(e) { alert('Error updating reminder.'); }
+    },
+    async generateMissingReminders() {
+      if (!this.fc || !this.patient) return;
+      try {
+        await generateRemindersForCase(this.fc, this.patient);
+        await this.loadReminders();
+      } catch(e) { alert('Error generating reminders.'); }
+    },
+    waLink(reminder) { return buildReminderWaLink(reminder); },
+    fmtDate(d) { return fmtDateShort(d); },
+    reminderDotCls(r) {
+      if (r.status === 'sent')    return 'r-dot r-dot-sent';
+      if (r.status === 'skipped') return 'r-dot r-dot-skipped';
+      if (r.reminderDate < this.today) return 'r-dot r-dot-overdue';
+      if (r.reminderDate === this.today) return 'r-dot r-dot-today';
+      return 'r-dot r-dot-pending';
+    },
+    reminderLabel(r) {
+      if (r.daysBeforeDue === 1)  return '1 day before';
+      if (r.daysBeforeDue === 0)  return 'On due date';
+      return r.daysBeforeDue + ' days before';
     }
   },
   mounted() { this.load(); },
@@ -829,6 +883,7 @@ const FollowupDetail = {
         <div class="loading-wrap" v-if="loading"><i class="ti ti-loader spin"></i> Loading\u2026</div>
         <div class="empty-section" v-else-if="loadError"><i class="ti ti-alert-triangle"></i><p>{{ loadError }}</p></div>
         <template v-else-if="fc">
+
           <div class="detail-card">
             <div class="detail-type-header">
               <div :class="typeCls"><i :class="typeIcon"></i></div>
@@ -848,15 +903,59 @@ const FollowupDetail = {
               <div class="info-item info-full" v-if="fc.notes"><div class="info-label">Notes</div><div class="info-value">{{ fc.notes }}</div></div>
             </div>
           </div>
-          <div class="form-actions" v-if="fc.status==='active'">
+
+          <div class="form-actions" v-if="fc.status==='active'" style="margin-bottom:20px">
             <button class="btn btn-primary" @click="markStatus('completed')" :disabled="updating">
               <i class="ti ti-loader spin" v-if="updating"></i><i class="ti ti-check" v-else></i> Mark completed
             </button>
             <button class="btn btn-secondary" @click="markStatus('declined')" :disabled="updating">Mark declined</button>
           </div>
-          <p style="font-size:12px;color:var(--text-muted);margin-top:8px" v-else>
-            Status: <strong style="text-transform:capitalize">{{ fc.status }}</strong> &mdash; Reminder history and contact outcomes coming in Step 8.
-          </p>
+
+          <div class="section-header">
+            <div class="section-title">
+              <i class="ti ti-brand-whatsapp" style="color:var(--teal-mid)"></i> Reminder tasks
+              <span class="pill pill-amber" v-if="actionableReminders.length" style="margin-left:6px;font-size:10px">{{ actionableReminders.length }} due</span>
+            </div>
+            <button class="btn btn-secondary btn-sm" v-if="!hasReminders && !loadingReminders" @click="generateMissingReminders">
+              <i class="ti ti-refresh"></i> Generate
+            </button>
+          </div>
+
+          <div class="section-card" style="margin-bottom:16px">
+            <div class="loading-wrap" v-if="loadingReminders" style="padding:16px"><i class="ti ti-loader spin"></i></div>
+
+            <template v-else-if="hasReminders">
+              <div class="reminder-row" v-for="r in reminders" :key="r.id">
+                <div :class="reminderDotCls(r)"></div>
+                <div class="reminder-info">
+                  <div class="reminder-date">{{ fmtDate(r.reminderDate) }}</div>
+                  <div class="reminder-meta">{{ reminderLabel(r) }}</div>
+                </div>
+                <span class="pill pill-teal"  v-if="r.status==='sent'"   >Sent</span>
+                <span class="pill pill-gray"  v-else-if="r.status==='skipped'">Skipped</span>
+                <span class="pill pill-gray"  v-else-if="r.reminderDate>today" style="opacity:.6">Upcoming</span>
+                <template v-else>
+                  <a  v-if="waLink(r)" :href="waLink(r)" target="_blank" class="action-btn action-btn-wa" @click="() => {}">
+                    <i class="ti ti-brand-whatsapp"></i> Send
+                  </a>
+                  <span v-else class="pill pill-gray" title="No WA consent or mobile">No WA</span>
+                  <button class="action-btn action-btn-call" @click="markReminderSent(r.id)">
+                    <i class="ti ti-check"></i> Mark sent
+                  </button>
+                  <button class="action-btn" style="border-color:var(--border-mid);color:var(--text-muted)" @click="markReminderSkipped(r.id)">
+                    Skip
+                  </button>
+                </template>
+              </div>
+            </template>
+
+            <div class="empty-section" style="padding:20px" v-else>
+              <i class="ti ti-bell-off"></i>
+              <p>No reminder tasks</p>
+              <p style="font-size:11px;color:#ccc;margin-top:2px">This case was created before Step 6. Click Generate above.</p>
+            </div>
+          </div>
+
         </template>
       </div>
     </div>

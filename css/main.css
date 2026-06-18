@@ -993,3 +993,33 @@ button { font-family: inherit; cursor: pointer; }
 .detail-type-recall     { background: #EDE9FE;            color: #5B21B6; }
 .detail-subtype { font-size: 15px; font-weight: 600; color: var(--text-primary); }
 .detail-patient { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+
+/* -----------------------------------------------
+   STEP 6: REMINDER ENGINE STYLES
+----------------------------------------------- */
+
+.reminder-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.reminder-row:last-child { border-bottom: none; }
+
+.r-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.r-dot-sent    { background: var(--teal-mid); }
+.r-dot-skipped { background: #B4B2A9; }
+.r-dot-overdue { background: var(--red-mid); }
+.r-dot-today   { background: var(--amber-mid); }
+.r-dot-pending { background: #B4B2A9; }
+
+.reminder-info   { flex: 1; min-width: 120px; }
+.reminder-date   { font-size: 12px; font-weight: 500; color: var(--text-primary); }
+.reminder-meta   { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
