@@ -1126,22 +1126,22 @@ const Config = {
     async loadClinicSettings() { this.loadingSettings=true; try { this.clinicSettings=await getClinicSettings(); } finally { this.loadingSettings=false; } },
     async saveSettings() { this.savingSettings=true; try { await saveClinicSettings(this.clinicSettings); alert('Saved.'); } finally { this.savingSettings=false; } },
     async loadAncSchedule() { this.loadingAnc=true; try { this.ancWeeks=await getAncScheduleConfig(); } finally { this.loadingAnc=false; } },
-    addAncWeek() { const w=parseInt(this.newWeek); if(w>0&&!this.ancWeeks.includes(w)){ this.ancWeeks=[...this.ancWeeks,w].sort((a,b)=>a-b); this.newWeek=\'\'; } },
+    addAncWeek() { const w=parseInt(this.newWeek); if(w>0&&!this.ancWeeks.includes(w)){ this.ancWeeks=[...this.ancWeeks,w].sort((a,b)=>a-b); this.newWeek=''; } },
     removeAncWeek(i) { this.ancWeeks=this.ancWeeks.filter((_,idx)=>idx!==i); },
     async saveAncSchedule() {
       this.savingAnc=true;
-      try { await saveAncScheduleConfig(this.ancWeeks.map(Number).filter(n=>n>0).sort((a,b)=>a-b)); alert(\'ANC schedule saved.\'); }
+      try { await saveAncScheduleConfig(this.ancWeeks.map(Number).filter(n=>n>0).sort((a,b)=>a-b)); alert('ANC schedule saved.'); }
       finally { this.savingAnc=false; }
     },
     async loadReminderSchedules() { this.loadingReminder=true; try { this.reminderSchedules=await getReminderSchedulesConfig(); } finally { this.loadingReminder=false; } },
     async saveReminderSchedules() {
       this.savingReminder=true;
-      try { await saveReminderSchedulesConfig(this.reminderSchedules); alert(\'Reminder schedules saved.\'); }
+      try { await saveReminderSchedulesConfig(this.reminderSchedules); alert('Reminder schedules saved.'); }
       finally { this.savingReminder=false; }
     },
     reminderTypes() { return [
-      {key:\'anc\',label:\'ANC visits\'},{key:\'vaccination\',label:\'Vaccination\'},
-      {key:\'post_procedure\',label:\'Post-procedure\'},{key:\'annual_recall\',label:\'Annual recall\'}
+      {key:'anc',label:'ANC visits'},{key:'vaccination',label:'Vaccination'},
+      {key:'post_procedure',label:'Post-procedure'},{key:'annual_recall',label:'Annual recall'}
     ]; },
     addReminderDay(type) {
       const c = this.reminderSchedules[type] || [];
@@ -1158,14 +1158,14 @@ const Config = {
       <div class="topbar"><div class="topbar-left"><h1>Settings</h1></div></div>
       <div class="content">
         <div class="config-tab-bar">
-          <button class="config-tab" :class="{on:tab===\'services\'}" @click="switchTab(\'services\')"><i class="ti ti-list-check"></i> Services</button>
-          <button class="config-tab" :class="{on:tab===\'clinic\'}"   @click="switchTab(\'clinic\')"><i class="ti ti-building"></i> Clinic</button>
-          <button class="config-tab" :class="{on:tab===\'anc\'}"      @click="switchTab(\'anc\')"><i class="ti ti-heart-rate-monitor"></i> ANC schedule</button>
-          <button class="config-tab" :class="{on:tab===\'reminder\'}" @click="switchTab(\'reminder\')"><i class="ti ti-bell"></i> Reminders</button>
+          <button class="config-tab" :class="{on:tab==='services'}" @click="switchTab('services')"><i class="ti ti-list-check"></i> Services</button>
+          <button class="config-tab" :class="{on:tab==='clinic'}"   @click="switchTab('clinic')"><i class="ti ti-building"></i> Clinic</button>
+          <button class="config-tab" :class="{on:tab==='anc'}"      @click="switchTab('anc')"><i class="ti ti-heart-rate-monitor"></i> ANC schedule</button>
+          <button class="config-tab" :class="{on:tab==='reminder'}" @click="switchTab('reminder')"><i class="ti ti-bell"></i> Reminders</button>
         </div>
 
         <!-- SERVICES TAB -->
-        <template v-if="tab===\'services\'">
+        <template v-if="tab==='services'">
           <div class="section-header">
             <div class="section-title">Services master list</div>
             <button class="btn btn-primary btn-sm" @click="showAddForm=!showAddForm"><i class="ti ti-plus"></i> Add service</button>
@@ -1178,7 +1178,7 @@ const Config = {
             </div>
             <div class="form-group"><label class="form-label">Category</label><select v-model="addForm.category" class="form-select"><option v-for="c in serviceCategories" :key="c.value" :value="c.value">{{ c.label }}</option></select></div>
             <div style="display:flex;gap:8px;margin-top:4px">
-              <button class="btn btn-primary btn-sm" @click="addService" :disabled="savingService||!addForm.name.trim()"><i class="ti ti-check"></i> {{ savingService ? \'Saving…\' : \'Save service\' }}</button>
+              <button class="btn btn-primary btn-sm" @click="addService" :disabled="savingService||!addForm.name.trim()"><i class="ti ti-check"></i> {{ savingService ? 'Saving…' : 'Save service' }}</button>
               <button class="btn btn-secondary btn-sm" @click="showAddForm=false">Cancel</button>
             </div>
           </div>
@@ -1188,7 +1188,7 @@ const Config = {
               <div class="service-item" :class="{inactive:!s.isActive}" v-if="editingId!==s.id">
                 <div style="flex:1"><div class="service-name">{{ s.name }}</div><div class="service-cat">{{ catLabel(s.category) }}</div></div>
                 <div class="service-amount">{{ fmtAmt(s.defaultAmount) }}</div>
-                <button :class="\'toggle-btn \'+(s.isActive?\'on\':\'off\')" @click="toggleActive(s)"></button>
+                <button :class="'toggle-btn '+(s.isActive?'on':'off')" @click="toggleActive(s)"></button>
                 <button class="action-btn" style="border-color:var(--border-mid)" @click="startEdit(s)"><i class="ti ti-edit"></i></button>
                 <button class="action-btn action-btn-flag" @click="removeService(s.id)"><i class="ti ti-trash"></i></button>
               </div>
@@ -1209,7 +1209,7 @@ const Config = {
         </template>
 
         <!-- CLINIC TAB -->
-        <template v-if="tab===\'clinic\'">
+        <template v-if="tab==='clinic'">
           <div class="loading-wrap" v-if="loadingSettings"><i class="ti ti-loader spin"></i></div>
           <div class="form-card" style="max-width:500px" v-else>
             <div class="form-card-title">Clinic information</div>
@@ -1220,12 +1220,12 @@ const Config = {
               <div class="form-group"><label class="form-label">Phone</label><input type="tel" v-model="clinicSettings.phone" class="form-input" /></div>
               <div class="form-group"><label class="form-label">Email</label><input type="email" v-model="clinicSettings.email" class="form-input" /></div>
             </div>
-            <div class="form-actions"><button class="btn btn-primary" @click="saveSettings" :disabled="savingSettings"><i class="ti ti-check"></i> {{ savingSettings ? \'Saving…\' : \'Save clinic info\' }}</button></div>
+            <div class="form-actions"><button class="btn btn-primary" @click="saveSettings" :disabled="savingSettings"><i class="ti ti-check"></i> {{ savingSettings ? 'Saving…' : 'Save clinic info' }}</button></div>
           </div>
         </template>
 
         <!-- ANC SCHEDULE TAB -->
-        <template v-if="tab===\'anc\'">
+        <template v-if="tab==='anc'">
           <div class="loading-wrap" v-if="loadingAnc"><i class="ti ti-loader spin"></i></div>
           <div class="form-card" style="max-width:500px" v-else>
             <div class="form-card-title">ANC visit schedule</div>
@@ -1237,12 +1237,12 @@ const Config = {
               <input type="number" v-model="newWeek" class="form-input" placeholder="Week number (e.g. 36)" style="width:200px" min="1" max="44" @keyup.enter="addAncWeek" />
               <button class="btn btn-secondary" @click="addAncWeek"><i class="ti ti-plus"></i> Add</button>
             </div>
-            <div class="form-actions"><button class="btn btn-primary" @click="saveAncSchedule" :disabled="savingAnc"><i class="ti ti-check"></i> {{ savingAnc ? \'Saving…\' : \'Save schedule\' }}</button></div>
+            <div class="form-actions"><button class="btn btn-primary" @click="saveAncSchedule" :disabled="savingAnc"><i class="ti ti-check"></i> {{ savingAnc ? 'Saving…' : 'Save schedule' }}</button></div>
           </div>
         </template>
 
         <!-- REMINDER SCHEDULES TAB -->
-        <template v-if="tab===\'reminder\'">
+        <template v-if="tab==='reminder'">
           <div class="loading-wrap" v-if="loadingReminder"><i class="ti ti-loader spin"></i></div>
           <div class="form-card" style="max-width:560px" v-else>
             <div class="form-card-title">Reminder schedules</div>
@@ -1250,11 +1250,11 @@ const Config = {
             <div v-for="type in reminderTypes()" :key="type.key" style="margin-bottom:20px">
               <p class="form-section-title" style="margin-top:0">{{ type.label }}</p>
               <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-                <div v-for="(day,i) in (reminderSchedules[type.key]||[])" :key="i" class="week-tag">{{ day }} day{{ day===1?\'\':\'s\' }} before<button class="week-tag-remove" @click="removeReminderDay(type.key,i)"><i class="ti ti-x"></i></button></div>
+                <div v-for="(day,i) in (reminderSchedules[type.key]||[])" :key="i" class="week-tag">{{ day }} day{{ day===1?'':'s' }} before<button class="week-tag-remove" @click="removeReminderDay(type.key,i)"><i class="ti ti-x"></i></button></div>
                 <button class="btn btn-secondary btn-sm" @click="addReminderDay(type.key)"><i class="ti ti-plus"></i> Add interval</button>
               </div>
             </div>
-            <div class="form-actions"><button class="btn btn-primary" @click="saveReminderSchedules" :disabled="savingReminder"><i class="ti ti-check"></i> {{ savingReminder ? \'Saving…\' : \'Save schedules\' }}</button></div>
+            <div class="form-actions"><button class="btn btn-primary" @click="saveReminderSchedules" :disabled="savingReminder"><i class="ti ti-check"></i> {{ savingReminder ? 'Saving…' : 'Save schedules' }}</button></div>
           </div>
         </template>
       </div>
@@ -1299,21 +1299,21 @@ const Analytics = {
       const ctx1 = this.$refs.chartRevenue;
       if (ctx1 && this.trendData.length) {
         this._chartRevenue = new Chart(ctx1, {
-          type: \'line\',
+          type: 'line',
           data: {
             labels: this.trendData.map(d => {
-              const [y,m,dy] = d.date.split(\'-\').map(Number);
-              return new Date(y,m-1,dy).toLocaleDateString(\'en-IN\',{day:\'numeric\',month:\'short\'});
+              const [y,m,dy] = d.date.split('-').map(Number);
+              return new Date(y,m-1,dy).toLocaleDateString('en-IN',{day:'numeric',month:'short'});
             }),
-            datasets: [{ label: \'Revenue\', data: this.trendData.map(d=>d.amount),
-              borderColor: \'#0F6E56\', backgroundColor: \'rgba(15,110,86,0.08)\',
+            datasets: [{ label: 'Revenue', data: this.trendData.map(d=>d.amount),
+              borderColor: '#0F6E56', backgroundColor: 'rgba(15,110,86,0.08)',
               fill: true, tension: 0.4, pointRadius: 3, pointHoverRadius: 5 }]
           },
           options: {
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
-              y: { beginAtZero: true, ticks: { callback: v => \'₹\'+v.toLocaleString(\'en-IN\') } },
+              y: { beginAtZero: true, ticks: { callback: v => '₹'+v.toLocaleString('en-IN') } },
               x: { ticks: { maxTicksLimit: 10, maxRotation: 0 } }
             }
           }
@@ -1322,16 +1322,16 @@ const Analytics = {
       const ctx2 = this.$refs.chartMode;
       if (ctx2 && this.hasModeData) {
         this._chartMode = new Chart(ctx2, {
-          type: \'doughnut\',
+          type: 'doughnut',
           data: {
-            labels: [\'Cash\',\'UPI\',\'Card / POS\',\'Bank Transfer\'],
+            labels: ['Cash','UPI','Card / POS','Bank Transfer'],
             datasets: [{ data: [this.modeData.cash,this.modeData.upi,this.modeData.card,this.modeData.bank_transfer],
-              backgroundColor: [\'#0F6E56\',\'#185FA5\',\'#666\',\'#BA7517\'],
-              borderWidth: 2, borderColor: \'#fff\' }]
+              backgroundColor: ['#0F6E56','#185FA5','#666','#BA7517'],
+              borderWidth: 2, borderColor: '#fff' }]
           },
           options: {
             responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { position:\'bottom\', labels:{ font:{size:12}, padding:12 } } }
+            plugins: { legend: { position:'bottom', labels:{ font:{size:12}, padding:12 } } }
           }
         });
       }
@@ -1378,14 +1378,14 @@ const Analytics = {
             <div class="compliance-row">
               <div style="flex:1">
                 <div style="color:var(--teal-mid);font-weight:500">Completed — {{ followupStats.complianceRate }}%</div>
-                <div class="compliance-bar-bg"><div class="compliance-bar" :style="{width:followupStats.complianceRate+\'%\',background:\'var(--teal-mid)\'}"></div></div>
+                <div class="compliance-bar-bg"><div class="compliance-bar" :style="{width:followupStats.complianceRate+'%',background:'var(--teal-mid)'}"></div></div>
               </div>
               <strong style="color:var(--teal-mid);margin-left:16px">{{ followupStats.completed }}</strong>
             </div>
             <div class="compliance-row">
               <div style="flex:1">
                 <div style="color:var(--amber-mid);font-weight:500">Overdue — {{ followupStats.overdueRate }}% of active</div>
-                <div class="compliance-bar-bg"><div class="compliance-bar" :style="{width:followupStats.overdueRate+\'%\',background:\'var(--amber-mid)\'}"></div></div>
+                <div class="compliance-bar-bg"><div class="compliance-bar" :style="{width:followupStats.overdueRate+'%',background:'var(--amber-mid)'}"></div></div>
               </div>
               <strong style="color:var(--amber-mid);margin-left:16px">{{ followupStats.overdue }}</strong>
             </div>
