@@ -1,5 +1,5 @@
 // ================================================================
-//  AUTHENTICATION HELPERS
+//  AUTHENTICATION + USER ACCESS
 // ================================================================
 
 async function signInWithGoogle() {
@@ -12,22 +12,31 @@ async function signOutUser() {
 }
 
 // ----------------------------------------------------------------
-//  WHITELIST CHECK
-//  Reads allowed emails from Firestore: meta/whitelist { emails: [] }
-//  To add a user: Firebase Console → Firestore → meta → whitelist
-//  → emails array → add their Google email address.
-//  If the whitelist document does not exist, all Google sign-ins
-//  are allowed (safe for early dev; create the doc to restrict access).
+//  checkUserAccess(email)
+//  Returns { role, name } or null if access denied.
+//  Priority: users/ collection (role-based) → legacy meta/whitelist
 // ----------------------------------------------------------------
 
-async function checkWhitelist(email) {
+async function checkUserAccess(email) {
+  const key = email.toLowerCase().trim();
+
+  // 1. New role-based users collection
   try {
-    const doc = await db.collection('meta').doc('whitelist').get();
-    if (!doc.exists) return true;
-    const emails = (doc.data().emails || []).map(e => e.toLowerCase().trim());
-    return emails.includes(email.toLowerCase().trim());
-  } catch (e) {
-    console.error('Whitelist check failed:', e);
-    return false;
-  }
+    const doc = await db.collection('users').doc(key).get();
+    if (doc.exists) {
+      const d = doc.data();
+      if (d.isActive === false) return null;
+      return { role: d.role || 'staff', name: d.name || email };
+    }
+  } catch(e) { console.warn('User registry read failed:', e); }
+
+  // 2. Legacy whitelist fallback (transition period — grants doctor role)
+  try {
+    const wl = await db.collection('meta').doc('whitelist').get();
+    if (!wl.exists) return { role: 'doctor', name: email }; // dev: no whitelist = open
+    const list = (wl.data().emails || []).map(e => e.toLowerCase().trim());
+    if (list.includes(key)) return { role: 'doctor', name: email };
+  } catch(e) { console.warn('Legacy whitelist read failed:', e); }
+
+  return null; // access denied
 }

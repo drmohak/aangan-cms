@@ -126,3 +126,45 @@ async function getRevenueByType(days) {
   });
   return totals;
 }
+
+// ----------------------------------------------------------------
+//  DASHBOARD STATS
+// ----------------------------------------------------------------
+
+async function getDashboardStats(role) {
+  const today      = _today();
+  const monthStart = today.slice(0, 7) + '-01';
+
+  const [remSnap, casesSnap, ptSnap] = await Promise.all([
+    db.collection('reminderTasks').where('dueDate','==',today).where('status','==','pending').get(),
+    db.collection('followupCases').where('status','==','active').get(),
+    db.collection('patients').get()
+  ]);
+
+  const pendingToday  = remSnap.size;
+  const overdueCount  = casesSnap.docs.filter(d => d.data().dueDate < today).length;
+  const monthPatients = ptSnap.docs.filter(d => {
+    const ct = d.data().createdAt;
+    if (!ct) return false;
+    try { return ct.toDate().toISOString().split('T')[0] >= monthStart; } catch(e) { return false; }
+  }).length;
+
+  let todayRevenue = 0, todayInvoiceCount = 0;
+  if (role === 'doctor') {
+    const invSnap = await db.collection('invoices')
+      .where('date','==',today).where('paymentStatus','==','paid').get();
+    todayRevenue      = invSnap.docs.reduce((s, d) => s + (d.data().totalAmount || 0), 0);
+    todayInvoiceCount = invSnap.size;
+  }
+
+  return { pendingToday, overdueCount, monthPatients, todayRevenue, todayInvoiceCount };
+}
+
+async function getRecentInvoicesForDashboard() {
+  const snap = await db.collection('invoices').get();
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .filter(inv => inv.createdAt)
+    .sort((a, b) => (b.createdAt.seconds || 0) - (a.createdAt.seconds || 0))
+    .slice(0, 6);
+}

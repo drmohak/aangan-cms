@@ -144,14 +144,24 @@ const PatientSearch = {
           <p class="results-meta" v-if="query">{{ filteredPatients.length }} result{{ filteredPatients.length===1?'':'s' }} for &ldquo;{{ query }}&rdquo;</p>
           <p class="results-meta" v-else>{{ filteredPatients.length }} patient{{ filteredPatients.length===1?'':'s' }}</p>
           <div class="empty-section" v-if="filteredPatients.length===0"><i class="ti ti-zoom-cancel"></i><p>No patients match &ldquo;{{ query }}&rdquo;</p></div>
-          <div class="pt-card" v-for="p in filteredPatients" :key="p.id" @click="$router.push('/patients/'+p.id)">
-            <div class="avatar avatar-md" :class="p.type==='child'?'avatar-blue':avatarClass(p.name)">{{ initials(p.name) }}</div>
-            <div class="pt-info">
-              <div class="pt-name">{{ p.name }}</div>
-              <div class="pt-meta">{{ p.patientId }}<template v-if="age(p.dob)"> &middot; {{ age(p.dob) }}</template> &middot; {{ p.mobile||p.motherName }}</div>
-            </div>
-            <div class="pt-right"><span class="pill pill-blue" v-if="p.type==='child'">Child</span><span class="pill pill-teal" v-else>Adult</span></div>
-            <i class="ti ti-chevron-right" style="color:var(--text-muted);font-size:15px;flex-shrink:0"></i>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr>
+                <th style="width:36px"></th>
+                <th>Name</th><th>ID</th><th>Age</th><th>Mobile</th><th>Type</th><th style="width:40px"></th>
+              </tr></thead>
+              <tbody>
+                <tr class="trow" v-for="p in filteredPatients" :key="p.id" @click="$router.push('/patients/'+p.id)">
+                  <td><div class="avatar avatar-sm" :class="p.type==='child'?'avatar-blue':avatarClass(p.name)">{{ initials(p.name) }}</div></td>
+                  <td class="td-name">{{ p.name }}</td>
+                  <td class="td-mono">{{ p.patientId }}</td>
+                  <td class="td-muted">{{ age(p.dob)||'—' }}</td>
+                  <td class="td-muted">{{ p.mobile||p.motherName||'—' }}</td>
+                  <td><span class="pill pill-blue" v-if="p.type==='child'">Child</span><span class="pill pill-teal" v-else>Adult</span></td>
+                  <td><i class="ti ti-chevron-right" style="color:var(--text-muted);font-size:13px"></i></td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </template>
       </div>
@@ -1087,7 +1097,10 @@ const Config = {
       loadingSettings: false, savingSettings: false,
       ancWeeks: [], loadingAnc: false, savingAnc: false, newWeek: '',
       reminderSchedules: { anc:[14,7,1], vaccination:[30,7,1], post_procedure:[3,1], annual_recall:[30,7,1] },
-      loadingReminder: false, savingReminder: false
+      loadingReminder: false, savingReminder: false,
+      users: [], loadingUsers: false,
+      showAddUser: false,
+      addUserForm: { email:'', name:'', role:'staff' }
     };
   },
   computed: {
@@ -1100,6 +1113,7 @@ const Config = {
       if (t === 'clinic')    await this.loadClinicSettings();
       if (t === 'anc')       await this.loadAncSchedule();
       if (t === 'reminder')  await this.loadReminderSchedules();
+      if (t === 'users')     await this.loadUsers();
     },
     async loadServices() {
       this.loadingServices = true;
@@ -1150,7 +1164,20 @@ const Config = {
     removeReminderDay(type, i) {
       const c = [...(this.reminderSchedules[type]||[])]; c.splice(i,1);
       this.reminderSchedules = { ...this.reminderSchedules, [type]: c };
-    }
+    },
+    async loadUsers() {
+      this.loadingUsers=true;
+      try { this.users = await getUsers(); } finally { this.loadingUsers=false; }
+    },
+    async saveAddUser() {
+      if (!this.addUserForm.email.trim()) return;
+      try { await addUser(this.addUserForm.email, this.addUserForm); this.addUserForm={email:'',name:'',role:'staff'}; this.showAddUser=false; await this.loadUsers(); }
+      catch(e){ alert('Error: '+e.message); }
+    },
+    async changeRole(u, role) { await updateUserRole(u.id, role); await this.loadUsers(); },
+    async toggleUser(u) { await toggleUserActive(u.id, !u.isActive); await this.loadUsers(); },
+    async deleteUser(u) { if(!confirm('Remove '+u.id+'?')) return; await removeUser(u.id); await this.loadUsers(); },
+    roleLabel(r) { return r==='doctor'?'Doctor':'Staff'; }
   },
   mounted() { this.loadServices(); },
   template: `
@@ -1162,6 +1189,7 @@ const Config = {
           <button class="config-tab" :class="{on:tab==='clinic'}"   @click="switchTab('clinic')"><i class="ti ti-building"></i> Clinic</button>
           <button class="config-tab" :class="{on:tab==='anc'}"      @click="switchTab('anc')"><i class="ti ti-heart-rate-monitor"></i> ANC schedule</button>
           <button class="config-tab" :class="{on:tab==='reminder'}" @click="switchTab('reminder')"><i class="ti ti-bell"></i> Reminders</button>
+          <button class="config-tab" :class="{on:tab==='users'}"    @click="switchTab('users')"><i class="ti ti-users"></i> Users</button>
         </div>
 
         <!-- SERVICES TAB -->
@@ -1239,6 +1267,44 @@ const Config = {
             </div>
             <div class="form-actions"><button class="btn btn-primary" @click="saveAncSchedule" :disabled="savingAnc"><i class="ti ti-check"></i> {{ savingAnc ? 'Saving…' : 'Save schedule' }}</button></div>
           </div>
+        </template>
+
+        <!-- USERS TAB -->
+        <template v-if="tab==='users'">
+          <div class="section-header">
+            <div class="section-title">Access &amp; roles</div>
+            <button class="btn btn-primary btn-sm" @click="showAddUser=!showAddUser"><i class="ti ti-plus"></i> Add user</button>
+          </div>
+          <div class="detail-card" v-if="showAddUser" style="margin-bottom:14px">
+            <p class="form-section-title" style="margin-top:0">New user</p>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">Email <span class="form-required">*</span></label><input type="email" v-model="addUserForm.email" class="form-input" placeholder="user@gmail.com" /></div>
+              <div class="form-group"><label class="form-label">Display name</label><input type="text" v-model="addUserForm.name" class="form-input" placeholder="Dr. Name" /></div>
+            </div>
+            <div class="form-group"><label class="form-label">Role</label>
+              <select v-model="addUserForm.role" class="form-select" style="max-width:200px">
+                <option value="doctor">Doctor</option><option value="staff">Staff</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <button class="btn btn-primary btn-sm" @click="saveAddUser" :disabled="!addUserForm.email.trim()"><i class="ti ti-check"></i> Add user</button>
+              <button class="btn btn-secondary btn-sm" @click="showAddUser=false">Cancel</button>
+            </div>
+          </div>
+          <div class="loading-wrap" v-if="loadingUsers"><i class="ti ti-loader spin"></i></div>
+          <div class="section-card" v-else-if="users.length">
+            <div class="user-row" v-for="u in users" :key="u.id" :style="u.isActive===false?'opacity:0.5':''">
+              <div class="user-name-col">{{ u.name||u.id }}</div>
+              <div class="user-email-col">{{ u.id }}</div>
+              <span :class="'role-badge role-'+u.role">{{ roleLabel(u.role) }}</span>
+              <select :value="u.role" @change="changeRole(u,$event.target.value)" class="form-select" style="width:110px;font-size:12px;padding:4px 8px">
+                <option value="doctor">Doctor</option><option value="staff">Staff</option>
+              </select>
+              <button :class="(u.isActive!==false?'toggle-btn on':'toggle-btn off')" @click="toggleUser(u)"></button>
+              <button class="action-btn action-btn-flag" @click="deleteUser(u)"><i class="ti ti-trash"></i></button>
+            </div>
+          </div>
+          <div class="empty-section" v-else><i class="ti ti-users"></i><p>No users yet. Add the first user above.<br><small style="color:var(--text-muted)">Note: legacy whitelist users still have access until added here.</small></p></div>
         </template>
 
         <!-- REMINDER SCHEDULES TAB -->
@@ -1393,6 +1459,173 @@ const Analytics = {
             <div class="compliance-row"><span style="color:var(--text-muted)">Declined</span><span style="color:var(--text-muted)">{{ followupStats.declined }}</span></div>
           </div>
         </template>
+      </div>
+    </div>
+  `
+};
+
+
+// ================================================================
+//  DASHBOARD  (landing screen)
+// ================================================================
+
+const Dashboard = {
+  name: 'Dashboard',
+  data() {
+    return {
+      stats: null, loading: true,
+      reminders: [], recentInvoices: [],
+      loadingQ: true, loadingInv: true
+    };
+  },
+  computed: {
+    greeting() {
+      const h = new Date().getHours();
+      if (h < 12) return 'Good morning';
+      if (h < 17) return 'Good afternoon';
+      return 'Good evening';
+    },
+    todayLabel() {
+      return new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    },
+    role()     { return this.$root.role; },
+    userName() {
+      const n = this.$root.userName || this.$root.user?.displayName || '';
+      return n.split(' ')[0] || 'there';
+    }
+  },
+  methods: {
+    async loadAll() {
+      this.loading = true; this.loadingQ = true; this.loadingInv = true;
+      getDashboardStats(this.$root.role)
+        .then(s => { this.stats = s; })
+        .finally(() => { this.loading = false; });
+      getTodaysPendingReminders()
+        .then(r => { this.reminders = r.slice(0, 6); })
+        .finally(() => { this.loadingQ = false; });
+      if (this.$root.role === 'doctor') {
+        getRecentInvoicesForDashboard()
+          .then(inv => { this.recentInvoices = inv; })
+          .finally(() => { this.loadingInv = false; });
+      } else { this.loadingInv = false; }
+    },
+    async markSent(r) {
+      await updateReminderStatus(r.id, 'sent');
+      this.reminders = this.reminders.filter(x => x.id !== r.id);
+      if (this.stats) this.stats.pendingToday = Math.max(0, this.stats.pendingToday - 1);
+    },
+    waLink(r)   { return buildReminderWaLink(r); },
+    fmtAmt(n)   { return fmtAmount(n); },
+    fmtDate(d)  { return fmtDateShort(d); },
+    pillCls(t)  { return {anc:'pill-teal',vaccination:'pill-blue',post_procedure:'pill-gray',annual_recall:'pill-gray'}[t]||'pill-gray'; },
+    pillTxt(t)  { return {anc:'ANC',vaccination:'Vaccine',post_procedure:'Post-op',annual_recall:'Recall'}[t]||'Follow-up'; },
+    modeLbl(m)  { return (PAYMENT_MODE_LABELS||{})[m]||m; },
+    initials(n) { return patientInitials(n); }
+  },
+  mounted() { this.loadAll(); },
+  template: `
+    <div class="screen">
+      <div class="content">
+
+        <!-- Header -->
+        <div class="dash-header">
+          <div class="dash-greeting">{{ greeting }}, {{ userName }}</div>
+          <div class="dash-date">{{ todayLabel }}</div>
+        </div>
+
+        <!-- Stat cards -->
+        <div class="dash-stats" v-if="stats || loading">
+          <div class="dash-stat teal">
+            <div class="dash-stat-label">Reminders today</div>
+            <div class="dash-stat-value">{{ loading ? '—' : stats.pendingToday }}</div>
+            <div class="dash-stat-sub">Pending to send</div>
+          </div>
+          <div class="dash-stat amber">
+            <div class="dash-stat-label">Overdue cases</div>
+            <div class="dash-stat-value">{{ loading ? '—' : stats.overdueCount }}</div>
+            <div class="dash-stat-sub">Past due date</div>
+          </div>
+          <div class="dash-stat blue">
+            <div class="dash-stat-label">New this month</div>
+            <div class="dash-stat-value">{{ loading ? '—' : stats.monthPatients }}</div>
+            <div class="dash-stat-sub">Patients registered</div>
+          </div>
+          <div class="dash-stat" v-if="role==='doctor'">
+            <div class="dash-stat-label">Today\u2019s revenue</div>
+            <div class="dash-stat-value" style="font-size:22px;color:var(--teal-mid)">{{ loading ? '—' : fmtAmt(stats.todayRevenue) }}</div>
+            <div class="dash-stat-sub">{{ loading ? '' : stats.todayInvoiceCount + ' invoice' + (stats.todayInvoiceCount===1?'':'s') }}</div>
+          </div>
+          <div class="dash-stat" v-else>
+            <div class="dash-stat-label">Upcoming (7 days)</div>
+            <div class="dash-stat-value" style="font-size:22px">—</div>
+            <div class="dash-stat-sub">Follow-ups due</div>
+          </div>
+        </div>
+
+        <!-- Quick actions -->
+        <div class="dash-actions">
+          <button class="dash-action-btn primary" @click="$router.push('/patients/new')"><i class="ti ti-user-plus"></i> New patient</button>
+          <button class="dash-action-btn" @click="$router.push('/followups/new')"><i class="ti ti-calendar-plus"></i> New follow-up</button>
+          <button class="dash-action-btn" @click="$router.push('/encounters/new')"><i class="ti ti-stethoscope"></i> New encounter</button>
+          <button class="dash-action-btn" @click="$router.push('/billing/new')"><i class="ti ti-receipt"></i> New invoice</button>
+          <button class="dash-action-btn" @click="$router.push('/patients')"><i class="ti ti-search"></i> Find patient</button>
+        </div>
+
+        <!-- Two-column panels -->
+        <div class="dash-cols">
+
+          <!-- Left: today's reminders -->
+          <div class="dash-panel">
+            <div class="dash-panel-header">
+              <span class="dash-panel-title"><i class="ti ti-brand-whatsapp" style="color:var(--teal-mid)"></i> Today\u2019s reminders</span>
+              <button class="dash-panel-link" @click="$router.push('/queue')">View all \u2192</button>
+            </div>
+            <div class="loading-wrap" style="padding:24px" v-if="loadingQ"><i class="ti ti-loader spin"></i></div>
+            <div class="dash-panel-empty" v-else-if="reminders.length===0">
+              <i class="ti ti-circle-check" style="font-size:22px;color:var(--teal-mid)"></i><br>All clear — no pending reminders
+            </div>
+            <template v-else>
+              <div class="dash-panel-row" v-for="r in reminders" :key="r.id">
+                <div class="avatar avatar-sm" :class="pillCls(r.followupType)==='pill-teal'?'avatar-teal':'avatar-blue'">{{ initials(r.patientName) }}</div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-weight:500;font-size:13px">{{ r.patientName }}</div>
+                  <div style="font-size:11px;color:var(--text-muted)">{{ r.subType }}</div>
+                </div>
+                <span class="pill" :class="pillCls(r.followupType)" style="font-size:10px;flex-shrink:0">{{ pillTxt(r.followupType) }}</span>
+                <a v-if="waLink(r)" :href="waLink(r)" target="_blank" class="action-btn action-btn-wa" style="flex-shrink:0"><i class="ti ti-brand-whatsapp"></i></a>
+                <button class="action-btn" style="flex-shrink:0;border-color:var(--teal-border);color:var(--teal-mid)" @click="markSent(r)"><i class="ti ti-check"></i></button>
+              </div>
+            </template>
+          </div>
+
+          <!-- Right: recent invoices (doctor) or follow-ups (staff) -->
+          <div class="dash-panel" v-if="role==='doctor'">
+            <div class="dash-panel-header">
+              <span class="dash-panel-title"><i class="ti ti-receipt" style="color:var(--teal-mid)"></i> Recent invoices</span>
+              <button class="dash-panel-link" @click="$router.push('/billing')">View all \u2192</button>
+            </div>
+            <div class="loading-wrap" style="padding:24px" v-if="loadingInv"><i class="ti ti-loader spin"></i></div>
+            <div class="dash-panel-empty" v-else-if="recentInvoices.length===0">No invoices yet</div>
+            <template v-else>
+              <div class="dash-panel-row" v-for="inv in recentInvoices" :key="inv.id" style="cursor:pointer" @click="$router.push('/billing/'+inv.id)">
+                <div style="flex:1;min-width:0">
+                  <div style="font-weight:500;font-size:13px">{{ inv.patientName }}</div>
+                  <div style="font-size:11px;color:var(--text-muted)">{{ inv.invoiceNumber }} \u00b7 {{ fmtDate(inv.date) }}</div>
+                </div>
+                <div style="font-weight:600;color:var(--teal-mid);flex-shrink:0">{{ fmtAmt(inv.totalAmount) }}</div>
+              </div>
+            </template>
+          </div>
+
+          <div class="dash-panel" v-else>
+            <div class="dash-panel-header">
+              <span class="dash-panel-title"><i class="ti ti-calendar-check" style="color:var(--teal-mid)"></i> Upcoming follow-ups</span>
+              <button class="dash-panel-link" @click="$router.push('/followups')">View all \u2192</button>
+            </div>
+            <div class="dash-panel-empty">Use the follow-ups screen to see upcoming cases.</div>
+          </div>
+
+        </div>
       </div>
     </div>
   `
@@ -1807,20 +2040,76 @@ const BillingList = {
         </div>
         <template v-else>
           <p class="results-meta">{{ invoices.length }} invoices</p>
-          <div class="section-card">
-            <div class="invoice-row" v-for="inv in invoices" :key="inv.id" @click="$router.push('/billing/'+inv.id)">
-              <div class="invoice-no-badge">{{ inv.invoiceNumber }}</div>
-              <div class="invoice-info">
-                <div class="invoice-patient">{{ inv.patientName }}</div>
-                <div class="invoice-meta">{{ fmtDate(inv.date) }} &middot; {{ typeLabel(inv.invoiceType) }}</div>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr>
+                <th>Invoice</th><th>Patient</th><th>Date</th><th>Type</th><th>Mode</th><th class="td-amt" style="text-align:right">Amount</th><th style="width:80px">Edited</th><th style="width:40px"></th>
+              </tr></thead>
+              <tbody>
+                <tr class="trow" v-for="inv in invoices" :key="inv.id" @click="$router.push('/billing/'+inv.id)">
+                  <td class="td-mono">{{ inv.invoiceNumber }}</td>
+                  <td class="td-name">{{ inv.patientName }}</td>
+                  <td class="td-muted">{{ fmtDate(inv.date) }}</td>
+                  <td><span class="pill" style="font-size:10px">{{ typeLabel(inv.invoiceType) }}</span></td>
+                  <td><span class="pill" :class="modePill(inv.paymentMode)" style="font-size:10px">{{ modeLabel(inv.paymentMode) }}</span></td>
+                  <td class="td-amt">{{ fmtAmt(inv.totalAmount) }}</td>
+                  <td><span v-if="inv.hasEdits" class="edit-badge"><i class="ti ti-edit"></i> Edited</span></td>
+                  <td><button class="action-btn" @click.stop="printInv(inv)" title="Print"><i class="ti ti-printer"></i></button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- EDIT PANEL -->
+          <div class="detail-card" v-if="editing" style="margin-top:16px;border-color:var(--amber-border)">
+            <p class="form-section-title" style="margin-top:0;color:var(--amber-mid)"><i class="ti ti-edit"></i> Edit invoice</p>
+            <div v-for="(svc,i) in editForm.services" :key="i" class="service-row" style="margin-bottom:8px">
+              <input type="text" v-model="svc.description" class="form-input" style="flex:1" />
+              <div style="display:flex;align-items:center;gap:4px;border:1px solid var(--border-mid);border-radius:8px;padding:0 10px;flex-shrink:0">
+                <span style="font-size:12px;color:var(--text-muted)">&#8377;</span>
+                <input type="number" v-model="svc.amount" style="border:none;width:80px;font-size:13px;outline:none;background:transparent" />
               </div>
-              <span class="pill" :class="modePill(inv.paymentMode)">{{ modeLabel(inv.paymentMode) }}</span>
-              <div class="invoice-amount">{{ fmtAmt(inv.totalAmount) }}</div>
-              <button class="action-btn action-btn-wa" @click.stop="printInv(inv)" title="Print">
-                <i class="ti ti-printer"></i>
-              </button>
+            </div>
+            <div class="form-row" style="margin-top:10px">
+              <div class="form-group">
+                <label class="form-label">Payment mode</label>
+                <select v-model="editForm.paymentMode" class="form-select">
+                  <option value="cash">Cash</option><option value="upi">UPI</option>
+                  <option value="card">Card / POS</option><option value="bank_transfer">Bank Transfer</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Notes</label>
+                <input type="text" v-model="editForm.notes" class="form-input" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Reason for edit <span class="form-required">*</span></label>
+              <input type="text" v-model="editReason" class="form-input" placeholder="e.g. Corrected service amount, wrong mode selected" />
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+              <div style="font-size:13px;font-weight:600">Revised total: {{ fmtAmt(editTotal) }}</div>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-secondary" @click="cancelEdit">Cancel</button>
+                <button class="btn btn-primary" @click="saveEdit" :disabled="savingEdit||!editReason.trim()">
+                  <i class="ti ti-check"></i> {{ savingEdit ? 'Saving\u2026' : 'Save edit' }}
+                </button>
+              </div>
             </div>
           </div>
+
+          <!-- EDIT HISTORY -->
+          <div v-if="edits.length" style="margin-top:16px">
+            <div class="section-header"><div class="section-title"><span class="edit-badge"><i class="ti ti-edit"></i> Edit history</span></div></div>
+            <div class="section-card">
+              <div class="edit-history-row" v-for="e in edits" :key="e.id">
+                <div class="edit-meta">{{ fmtTs(e.editedAt) }} &middot; {{ e.editedBy }}</div>
+                <div class="edit-reason">{{ e.reason }}</div>
+                <div style="margin-top:4px;color:var(--text-muted);font-size:11px">{{ fmtAmt(e.before.totalAmount) }} \u2192 {{ fmtAmt(e.after.totalAmount) }}</div>
+              </div>
+            </div>
+          </div>
+
         </template>
       </div>
     </div>
@@ -2026,19 +2315,45 @@ const NewInvoice = {
 
 const InvoiceDetail = {
   name: 'InvoiceDetail',
-  data() { return { invoice:null, loading:true, loadError:null }; },
+  data() { return { invoice:null, loading:true, loadError:null, editing:false, editForm:{services:[],paymentMode:'cash',notes:''}, editReason:'', edits:[], savingEdit:false }; },
+  computed: {
+    editTotal() { return this.editForm.services.reduce((s,x)=>s+(parseFloat(x.amount)||0),0); },
+    isDoctor()  { return this.$root.role==='doctor'; }
+  },
   methods: {
     async load() {
       this.loading=true; this.loadError=null;
-      try { this.invoice=await getInvoice(this.$route.params.id); if(!this.invoice) this.loadError='Invoice not found.'; }
-      catch(e) { this.loadError='Could not load invoice.'; }
+      try {
+        this.invoice=await getInvoice(this.$route.params.id);
+        if (!this.invoice) { this.loadError='Invoice not found.'; return; }
+        if (this.invoice.hasEdits) this.edits=await getInvoiceEdits(this.$route.params.id);
+      } catch(e) { this.loadError='Could not load invoice.'; }
       finally { this.loading=false; }
+    },
+    startEdit() {
+      this.editForm = {
+        services:    JSON.parse(JSON.stringify(this.invoice.services||[])),
+        paymentMode: this.invoice.paymentMode,
+        notes:       this.invoice.notes||''
+      };
+      this.editReason=''; this.editing=true;
+    },
+    cancelEdit() { this.editing=false; },
+    async saveEdit() {
+      if (!this.editReason.trim()) { alert('Please enter a reason for the edit.'); return; }
+      this.savingEdit=true;
+      try {
+        await editInvoice(this.invoice.id, { services:this.editForm.services, paymentMode:this.editForm.paymentMode, notes:this.editForm.notes, totalAmount:this.editTotal }, this.editReason);
+        this.editing=false; await this.load();
+      } catch(e) { alert('Error: '+e.message); }
+      finally { this.savingEdit=false; }
     },
     print()        { if(this.invoice) printInvoice(this.invoice); },
     fmtAmt(n)      { return fmtAmount(n); },
     fmtDate(d)     { return fmtDateShort(d); },
     modeLabel(m)   { return PAYMENT_MODE_LABELS[m]||m||'\u2014'; },
-    typeLabel(t)   { return INVOICE_TYPE_LABELS[t]||t||'\u2014'; }
+    typeLabel(t)   { return INVOICE_TYPE_LABELS[t]||t||'\u2014'; },
+    fmtTs(ts)      { if(!ts||!ts.toDate) return '\u2014'; return ts.toDate().toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }
   },
   mounted() { this.load(); },
   template: `
@@ -2052,7 +2367,8 @@ const InvoiceDetail = {
           </div>
         </div>
         <div class="topbar-right" v-if="invoice">
-          <button class="btn btn-primary" @click="print"><i class="ti ti-printer"></i> Print</button>
+          <button class="btn btn-secondary" @click="print"><i class="ti ti-printer"></i> Print</button>
+          <button class="btn btn-secondary" @click="startEdit" v-if="!editing"><i class="ti ti-edit"></i> Edit invoice</button>
         </div>
       </div>
       <div class="content">
@@ -2231,7 +2547,8 @@ const Reconciliation = {
 const router = VueRouter.createRouter({
   history: VueRouter.createWebHashHistory(),
   routes: [
-    { path:'/',                   redirect:'/queue' },
+    { path:'/',                   redirect:'/dashboard' },
+    { path:'/dashboard',          component:Dashboard },
     { path:'/queue',              component:WorkQueue },
     { path:'/patients',           component:PatientSearch },
     { path:'/patients/new',       component:NewPatient },
@@ -2251,6 +2568,15 @@ const router = VueRouter.createRouter({
   ]
 });
 
+router.beforeEach((to, from, next) => {
+  const doctorOnly = ['/analytics', '/reconciliation', '/config'];
+  if (doctorOnly.some(p => to.path.startsWith(p)) && window._appRole !== 'doctor') {
+    next('/dashboard');
+  } else {
+    next();
+  }
+});
+
 // ================================================================
 //  ROOT APP
 // ================================================================
@@ -2258,7 +2584,7 @@ const router = VueRouter.createRouter({
 const App = {
   name: 'App',
   components: { Login },
-  data() { return { user:null, authChecked:false, whitelistError:false }; },
+  data() { return { user:null, role:null, userName:null, authChecked:false, whitelistError:false }; },
   computed: {
     section() {
       const p=this.$route.path;
@@ -2268,7 +2594,8 @@ const App = {
       if (p.startsWith('/reconciliation')) return 'reconciliation';
       if (p.startsWith('/analytics'))      return 'analytics';
       if (p.startsWith('/config'))         return 'config';
-      return 'queue';
+      if (p.startsWith('/dashboard'))      return 'dashboard';
+      return 'dashboard';
     },
     userInitials() {
       if (!this.user||!this.user.displayName) return '?';
@@ -2279,17 +2606,21 @@ const App = {
   mounted() {
     firebase.auth().onAuthStateChanged(async user => {
       if (user) {
-        const allowed = await checkWhitelist(user.email);
-        if (!allowed) {
+        const access = await checkUserAccess(user.email);
+        if (!access) {
           await signOutUser();
           this.whitelistError = true;
           this.user = null;
         } else {
-          this.user = user;
+          this.user     = user;
+          this.role     = access.role;
+          this.userName = access.name || user.displayName || user.email;
+          window._appRole = access.role;
           this.whitelistError = false;
         }
       } else {
-        this.user = null;
+        this.user = null; this.role = null; this.userName = null;
+        window._appRole = null;
       }
       this.authChecked = true;
     });
@@ -2302,19 +2633,20 @@ const App = {
         <aside class="sidebar">
           <div class="sidebar-logo"><span class="sidebar-name">Aangan Clinic</span><span class="sidebar-sub">Women\u2019s health centre</span></div>
           <nav class="sidebar-nav">
+            <button class="nav-btn" :class="{on:section==='dashboard'}"      @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Dashboard</button>
             <button class="nav-btn" :class="{on:section==='queue'}"          @click="$router.push('/queue')"><i class="ti ti-layout-list"></i> Work queue</button>
             <button class="nav-btn" :class="{on:section==='patients'}"       @click="$router.push('/patients')"><i class="ti ti-users"></i> Patients</button>
             <button class="nav-btn" :class="{on:section==='followups'}"      @click="$router.push('/followups')"><i class="ti ti-calendar-check"></i> Follow-ups</button>
             <button class="nav-btn" :class="{on:section==='billing'}"        @click="$router.push('/billing')"><i class="ti ti-receipt"></i> Billing</button>
-            <button class="nav-btn" :class="{on:section==='reconciliation'}" @click="$router.push('/reconciliation')"><i class="ti ti-chart-bar"></i> Reconciliation</button>
-            <button class="nav-btn" :class="{on:section==='analytics'}"      @click="$router.push('/analytics')"><i class="ti ti-chart-line"></i> Reports</button>
-            <button class="nav-btn" :class="{on:section==='config'}"         @click="$router.push('/config')"><i class="ti ti-settings"></i> Settings</button>
+            <button class="nav-btn" v-if="role==='doctor'" :class="{on:section==='reconciliation'}" @click="$router.push('/reconciliation')"><i class="ti ti-chart-bar"></i> Reconciliation</button>
+            <button class="nav-btn" v-if="role==='doctor'" :class="{on:section==='analytics'}"      @click="$router.push('/analytics')"><i class="ti ti-chart-line"></i> Reports</button>
+            <button class="nav-btn" v-if="role==='doctor'" :class="{on:section==='config'}"         @click="$router.push('/config')"><i class="ti ti-settings"></i> Settings</button>
           </nav>
           <div class="sidebar-footer">
             <div class="sidebar-user">
               <img v-if="user.photoURL" :src="user.photoURL" class="sidebar-user-avatar" referrerpolicy="no-referrer" />
               <div class="sidebar-user-avatar-placeholder" v-else>{{ userInitials }}</div>
-              <div style="min-width:0"><div class="sidebar-user-name">{{ user.displayName||'Staff' }}</div><div class="sidebar-user-email">{{ user.email }}</div></div>
+              <div style="min-width:0"><div class="sidebar-user-name">{{ userName||user.displayName||'Staff' }}</div><div class="sidebar-user-email">{{ user.email }}</div><div class="sidebar-user-role">{{ role==='doctor'?'Doctor':'Staff' }}</div></div>
             </div>
             <button class="sign-out-btn" @click="signOut"><i class="ti ti-logout"></i> Sign out</button>
           </div>

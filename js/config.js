@@ -103,3 +103,37 @@ async function getReminderSchedulesConfig() {
 async function saveReminderSchedulesConfig(schedules) {
   await db.collection('meta').doc('reminderSchedules').set(schedules);
 }
+
+// ----------------------------------------------------------------
+//  USER MANAGEMENT  (RBAC)
+// ----------------------------------------------------------------
+
+async function getUsers() {
+  const snap = await db.collection('users').get();
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+}
+
+async function addUser(email, data) {
+  const key = email.toLowerCase().trim();
+  await db.collection('users').doc(key).set({
+    name:     (data.name || '').trim() || key,
+    role:     data.role || 'staff',
+    isActive: true,
+    addedAt:  firebase.firestore.FieldValue.serverTimestamp(),
+    addedBy:  (firebase.auth().currentUser || {}).email || ''
+  });
+}
+
+async function updateUserRole(email, role) {
+  await db.collection('users').doc(email.toLowerCase()).update({ role });
+}
+
+async function toggleUserActive(email, isActive) {
+  await db.collection('users').doc(email.toLowerCase()).update({ isActive });
+}
+
+async function removeUser(email) {
+  await db.collection('users').doc(email.toLowerCase()).delete();
+}

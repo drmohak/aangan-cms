@@ -202,3 +202,45 @@ function printInvoice(inv) {
   w.document.close();
   setTimeout(function() { w.print(); }, 600);
 }
+
+// ----------------------------------------------------------------
+//  INVOICE EDIT WITH AUDIT TRAIL
+// ----------------------------------------------------------------
+
+async function editInvoice(id, updates, reason) {
+  const invRef = db.collection('invoices').doc(id);
+  const snap   = await invRef.get();
+  if (!snap.exists) throw new Error('Invoice not found');
+
+  const before = snap.data();
+  const editor = (firebase.auth().currentUser || {}).email || 'unknown';
+  const now    = firebase.firestore.FieldValue.serverTimestamp();
+  const batch  = db.batch();
+
+  batch.update(invRef, {
+    ...updates,
+    lastEditedAt: now,
+    lastEditedBy: editor,
+    hasEdits:     true
+  });
+
+  batch.set(invRef.collection('edits').doc(), {
+    editedAt: now,
+    editedBy: editor,
+    reason:   reason.trim(),
+    before: { totalAmount: before.totalAmount, services: before.services,
+              paymentMode: before.paymentMode, notes: before.notes },
+    after:  { totalAmount: updates.totalAmount, services: updates.services,
+              paymentMode: updates.paymentMode, notes: updates.notes }
+  });
+
+  await batch.commit();
+}
+
+async function getInvoiceEdits(invoiceId) {
+  const snap = await db.collection('invoices').doc(invoiceId)
+    .collection('edits').get();
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.editedAt?.seconds || 0) - (a.editedAt?.seconds || 0));
+}

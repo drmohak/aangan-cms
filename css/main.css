@@ -1505,3 +1505,214 @@ button { font-family: inherit; cursor: pointer; }
   color: var(--text-secondary);
   background: var(--surface);
 }
+
+/* -----------------------------------------------
+   LAYOUT OVERHAUL — desktop-first (Step 13 UI)
+----------------------------------------------- */
+
+/* Tighter content padding on large screens */
+.content { padding: 16px 22px; }
+
+/* ---- DATA TABLE ---- */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.data-table thead th {
+  text-align: left;
+  padding: 7px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.data-table tbody td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr.trow:hover { background: #f5faf9; cursor: pointer; }
+.data-table .td-muted { color: var(--text-muted); }
+.data-table .td-mono  { font-family: monospace; font-size: 12px; color: var(--text-secondary); }
+.data-table .td-amt   { font-weight: 600; color: var(--teal-mid); text-align: right; }
+.data-table .td-name  { font-weight: 500; }
+.table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+/* ---- DASHBOARD ---- */
+.dash-header {
+  margin-bottom: 16px;
+}
+.dash-greeting {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.dash-date {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+.dash-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.dash-stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  position: relative;
+  overflow: hidden;
+}
+.dash-stat::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--border);
+}
+.dash-stat.teal::before  { background: var(--teal-mid); }
+.dash-stat.amber::before { background: var(--amber-mid); }
+.dash-stat.red::before   { background: var(--red-mid); }
+.dash-stat.blue::before  { background: #185FA5; }
+.dash-stat-label { font-size: 11px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+.dash-stat-value { font-size: 30px; font-weight: 700; color: var(--text-primary); margin-top: 4px; line-height: 1; }
+.dash-stat.teal  .dash-stat-value { color: var(--teal-mid); }
+.dash-stat.amber .dash-stat-value { color: var(--amber-mid); }
+.dash-stat.red   .dash-stat-value { color: var(--red-mid); }
+.dash-stat.blue  .dash-stat-value { color: #185FA5; }
+.dash-stat-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+.dash-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.dash-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border-mid);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+.dash-action-btn:hover { border-color: var(--teal-border); color: var(--teal-mid); background: var(--teal-light); }
+.dash-action-btn.primary { background: var(--teal-mid); color: white; border-color: var(--teal-mid); }
+.dash-action-btn.primary:hover { background: var(--teal-dark); }
+
+.dash-cols {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 14px;
+}
+.dash-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.dash-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.dash-panel-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.dash-panel-link  { font-size: 12px; color: var(--teal-mid); cursor: pointer; border: none; background: none; font-family: inherit; }
+.dash-panel-link:hover { text-decoration: underline; }
+.dash-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.dash-panel-row:last-child { border-bottom: none; }
+.dash-panel-empty { padding: 28px; text-align: center; font-size: 13px; color: var(--text-muted); }
+
+/* ---- ROLE BADGE ---- */
+.role-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.role-doctor { background: var(--teal-light); color: var(--teal-dark); }
+.role-staff  { background: #f0f0f0; color: #666; }
+
+/* ---- SIDEBAR ROLE INDICATOR ---- */
+.sidebar-user-role { font-size: 10px; color: var(--teal-mid); font-weight: 500; margin-top: 1px; }
+
+/* ---- INVOICE EDIT PANEL ---- */
+.edit-history-row {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.edit-history-row:last-child { border-bottom: none; }
+.edit-meta { color: var(--text-muted); margin-bottom: 3px; }
+.edit-reason { color: var(--text-primary); font-weight: 500; }
+.edit-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--amber-mid);
+  background: var(--amber-light);
+  border: 1px solid var(--amber-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-weight: 600;
+}
+
+/* ---- CONFIG USERS TAB ---- */
+.user-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.user-row:last-child { border-bottom: none; }
+.user-name-col { flex: 1; font-weight: 500; }
+.user-email-col { flex: 1.5; color: var(--text-muted); font-size: 12px; }
+
+/* ---- OVERRIDE pt-card to be table-row like ---- */
+.pt-card {
+  border-radius: 0 !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-top: none !important;
+  margin-bottom: 0 !important;
+}
+.pt-card:first-child { border-top: none; }
