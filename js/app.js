@@ -1828,64 +1828,104 @@ const NewAppointment = {
 
 
 // ================================================================
-//  DASHBOARD  (landing screen)
+//  DASHBOARD — daily operations centre
 // ================================================================
 
 const Dashboard = {
   name: 'Dashboard',
   data() {
     return {
-      stats: null, loading: true,
-      reminders: [], recentInvoices: [], todayAppts: [],
-      loadingQ: true, loadingInv: true, loadingAppts: true
+      stats: null, statsLoading: true,
+      apptDate: todayIso(), appts: [], apptsLoading: true, savingApptId: null,
+      reminders: [], remindersLoading: true
     };
   },
   computed: {
     greeting() {
       const h = new Date().getHours();
-      if (h < 12) return 'Good morning';
-      if (h < 17) return 'Good afternoon';
-      return 'Good evening';
+      return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+    },
+    firstName() {
+      return (this.$root.userName || (this.$root.user||{}).displayName || '').split(' ')[0] || 'there';
     },
     todayLabel() {
       return new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
     },
-    role()     { return this.$root.role; },
-    userName() {
-      const n = this.$root.userName || this.$root.user?.displayName || '';
-      return n.split(' ')[0] || 'there';
+    role()        { return this.$root.role; },
+    isApptToday() { return this.apptDate === todayIso(); },
+    apptDateLabel() {
+      const [y,m,d] = this.apptDate.split('-').map(Number);
+      return new Date(y,m-1,d).toLocaleDateString('en-IN',{day:'numeric',month:'short',weekday:'short'});
+    },
+    apptsByDoctor() {
+      const seen = new Set(), order = [];
+      this.appts.forEach(a => { if (!seen.has(a.doctorName)) { seen.add(a.doctorName); order.push(a.doctorName); } });
+      return order.map(doc => ({ doctor: doc, appts: this.appts.filter(a => a.doctorName === doc) }));
+    },
+    apptStats() {
+      return {
+        scheduled: this.appts.filter(a => a.status === 'scheduled').length,
+        seen:      this.appts.filter(a => a.status === 'seen').length,
+        total:     this.appts.length
+      };
     }
   },
   methods: {
-    async loadAll() {
-      this.loading = true; this.loadingQ = true; this.loadingInv = true;
-      getDashboardStats(this.$root.role)
-        .then(s => { this.stats = s; })
-        .finally(() => { this.loading = false; });
-      getTodaysPendingReminders()
-        .then(r => { this.reminders = r.slice(0, 6); })
-        .finally(() => { this.loadingQ = false; });
-      if (this.$root.role === 'doctor') {
-        getRecentInvoicesForDashboard()
-          .then(inv => { this.recentInvoices = inv; })
-          .finally(() => { this.loadingInv = false; });
-      } else { this.loadingInv = false; }
-      getTodayAppointments()
-        .then(a => { this.todayAppts = a; })
-        .finally(() => { this.loadingAppts = false; });
+    loadAll() {
+      this.statsLoading=true; this.remindersLoading=true;
+      getDashboardStats(this.$root.role).then(s => { this.stats=s; }).finally(() => { this.statsLoading=false; });
+      this.loadAppts();
+      getTodaysPendingReminders().then(r => { this.reminders=r; }).finally(() => { this.remindersLoading=false; });
     },
+    async loadAppts() {
+      this.apptsLoading=true;
+      try { this.appts = await getAppointmentsByDate(this.apptDate); }
+      catch(e) { this.appts=[]; } finally { this.apptsLoading=false; }
+    },
+    prevDay()  { this.apptDate=addDays(this.apptDate,-1); this.loadAppts(); },
+    nextDay()  { this.apptDate=addDays(this.apptDate, 1); this.loadAppts(); },
+    goToday()  { this.apptDate=todayIso(); this.loadAppts(); },
+    async markSeen(appt) {
+      if (this.savingApptId) return;
+      this.savingApptId=appt.id;
+      try {
+        await updateAppointmentStatus(appt.id,'seen'); appt.status='seen';
+        if (appt.patientId && confirm('Open encounter form for '+appt.patientName+'?'))
+          this.$router.push('/encounters/new?patientId='+appt.patientId);
+      } finally { this.savingApptId=null; }
+    },
+    async markNoShow(appt) {
+      if (this.savingApptId) return;
+      this.savingApptId=appt.id;
+      try { await updateAppointmentStatus(appt.id,'no_show'); appt.status='no_show'; }
+      finally { this.savingApptId=null; }
+    },
+    async cancelAppt(appt) {
+      if (!confirm('Cancel appointment for '+appt.patientName+'?')) return;
+      this.savingApptId=appt.id;
+      try { await updateAppointmentStatus(appt.id,'cancelled'); appt.status='cancelled'; }
+      finally { this.savingApptId=null; }
+    },
+    apptWaLink(appt) { return appointmentWaLink(appt, this.apptDateLabel); },
     async markSent(r) {
-      await updateReminderStatus(r.id, 'sent');
-      this.reminders = this.reminders.filter(x => x.id !== r.id);
-      if (this.stats) this.stats.pendingToday = Math.max(0, this.stats.pendingToday - 1);
+      await updateReminderStatus(r.id,'sent');
+      this.reminders=this.reminders.filter(x=>x.id!==r.id);
+      if (this.stats) this.stats.pendingToday=Math.max(0,(this.stats.pendingToday||0)-1);
     },
-    waLink(r)   { return buildReminderWaLink(r); },
-    fmtAmt(n)   { return fmtAmount(n); },
-    fmtDate(d)  { return fmtDateShort(d); },
-    pillCls(t)  { return {anc:'pill-teal',vaccination:'pill-blue',post_procedure:'pill-gray',annual_recall:'pill-gray'}[t]||'pill-gray'; },
-    pillTxt(t)  { return {anc:'ANC',vaccination:'Vaccine',post_procedure:'Post-op',annual_recall:'Recall'}[t]||'Follow-up'; },
-    modeLbl(m)  { return (PAYMENT_MODE_LABELS||{})[m]||m; },
-    initials(n) { return patientInitials(n); }
+    async skipReminder(r) {
+      await updateReminderStatus(r.id,'skipped');
+      this.reminders=this.reminders.filter(x=>x.id!==r.id);
+    },
+    waLink(r)      { return buildReminderWaLink(r); },
+    fmtAmt(n)      { return fmtAmount(n); },
+    fmtDate(d)     { return fmtDateShort(d); },
+    apptTypeLbl(t) { return (APPOINTMENT_TYPES.find(x=>x.value===t)||{}).label||t||''; },
+    statusCls(s)   { return {scheduled:'pill-teal',seen:'pill-green',no_show:'pill-amber',cancelled:'pill-gray'}[s]||'pill-gray'; },
+    statusTxt(s)   { return {scheduled:'Scheduled',seen:'Seen',no_show:'No-show',cancelled:'Cancelled'}[s]||s; },
+    rPillCls(t)    { return {anc:'pill-teal',vaccination:'pill-blue',post_procedure:'pill-gray',annual_recall:'pill-gray'}[t]||'pill-gray'; },
+    rPillTxt(t)    { return {anc:'ANC',vaccination:'Vaccine',post_procedure:'Post-op',annual_recall:'Recall'}[t]||'Follow-up'; },
+    initials(n)    { return patientInitials(n); },
+    avCls(n)       { return patientAvatarClass(n); }
   },
   mounted() { this.loadAll(); },
   template: `
@@ -1894,113 +1934,115 @@ const Dashboard = {
 
         <!-- Header -->
         <div class="dash-header">
-          <div class="dash-greeting">{{ greeting }}, {{ userName }}</div>
+          <div class="dash-greeting">{{ greeting }}, {{ firstName }}</div>
           <div class="dash-date">{{ todayLabel }}</div>
         </div>
 
         <!-- Stat cards -->
-        <div class="dash-stats" :style="role==='doctor'?'grid-template-columns:repeat(5,minmax(0,1fr))':'grid-template-columns:repeat(4,minmax(0,1fr))'" v-if="stats || loading || !loadingAppts">
+        <div class="dash-stats" style="margin-bottom:14px" :style="role==='doctor'?'grid-template-columns:repeat(5,minmax(0,1fr))':'grid-template-columns:repeat(4,minmax(0,1fr))'">
           <div class="dash-stat teal">
             <div class="dash-stat-label">Appointments today</div>
-            <div class="dash-stat-value">{{ loadingAppts ? '—' : todayAppts.filter(a=>a.status==='scheduled').length }}</div>
-            <div class="dash-stat-sub">{{ loadingAppts ? '' : todayAppts.length + ' booked total' }}</div>
+            <div class="dash-stat-value">{{ apptsLoading&&isApptToday ? '\u2014' : apptStats.scheduled }}</div>
+            <div class="dash-stat-sub">{{ apptStats.seen }} seen of {{ apptStats.total }} booked</div>
           </div>
           <div class="dash-stat">
             <div class="dash-stat-label">Reminders today</div>
-            <div class="dash-stat-value" style="font-size:22px">{{ loading ? '—' : stats.pendingToday }}</div>
+            <div class="dash-stat-value" style="font-size:22px">{{ statsLoading ? '\u2014' : (stats?stats.pendingToday:'\u2014') }}</div>
             <div class="dash-stat-sub">Pending to send</div>
           </div>
           <div class="dash-stat amber">
             <div class="dash-stat-label">Overdue cases</div>
-            <div class="dash-stat-value">{{ loading ? '—' : stats.overdueCount }}</div>
-            <div class="dash-stat-sub">Past due date</div>
+            <div class="dash-stat-value">{{ statsLoading ? '\u2014' : (stats?stats.overdueCount:'\u2014') }}</div>
+            <div class="dash-stat-sub">Active follow-ups</div>
           </div>
           <div class="dash-stat blue">
             <div class="dash-stat-label">New this month</div>
-            <div class="dash-stat-value">{{ loading ? '—' : stats.monthPatients }}</div>
+            <div class="dash-stat-value">{{ statsLoading ? '\u2014' : (stats?stats.monthPatients:'\u2014') }}</div>
             <div class="dash-stat-sub">Patients registered</div>
           </div>
           <div class="dash-stat" v-if="role==='doctor'">
             <div class="dash-stat-label">Today\u2019s revenue</div>
-            <div class="dash-stat-value" style="font-size:22px;color:var(--teal-mid)">{{ loading ? '—' : fmtAmt(stats.todayRevenue) }}</div>
-            <div class="dash-stat-sub">{{ loading ? '' : stats.todayInvoiceCount + ' invoice' + (stats.todayInvoiceCount===1?'':'s') }}</div>
-          </div>
-          <div class="dash-stat" v-else>
-            <div class="dash-stat-label">Upcoming (7 days)</div>
-            <div class="dash-stat-value" style="font-size:22px">—</div>
-            <div class="dash-stat-sub">Follow-ups due</div>
+            <div class="dash-stat-value" style="font-size:20px;color:var(--teal-mid)">{{ statsLoading ? '\u2014' : fmtAmt(stats?stats.todayRevenue:0) }}</div>
+            <div class="dash-stat-sub">{{ stats ? stats.todayInvoiceCount+' invoice'+(stats.todayInvoiceCount===1?'':'s') : '' }}</div>
           </div>
         </div>
 
         <!-- Quick actions -->
-        <div class="dash-actions">
-          <button class="dash-action-btn primary" @click="$router.push('/patients/new')"><i class="ti ti-user-plus"></i> New patient</button>
-          <button class="dash-action-btn" @click="$router.push('/followups/new')"><i class="ti ti-calendar-plus"></i> New follow-up</button>
+        <div class="dash-actions" style="margin-bottom:16px">
+          <button class="dash-action-btn primary" @click="$router.push('/appointments/new')"><i class="ti ti-calendar-plus"></i> Book appointment</button>
+          <button class="dash-action-btn" @click="$router.push('/patients/new')"><i class="ti ti-user-plus"></i> New patient</button>
+          <button class="dash-action-btn" @click="$router.push('/followups/new')"><i class="ti ti-calendar-check"></i> New follow-up</button>
           <button class="dash-action-btn" @click="$router.push('/encounters/new')"><i class="ti ti-stethoscope"></i> New encounter</button>
           <button class="dash-action-btn" @click="$router.push('/billing/new')"><i class="ti ti-receipt"></i> New invoice</button>
-          <button class="dash-action-btn" @click="$router.push('/patients')"><i class="ti ti-search"></i> Find patient</button>
         </div>
 
-        <!-- Two-column panels -->
+        <!-- Main panels -->
         <div class="dash-cols">
 
-          <!-- Left: today's reminders -->
+          <!-- LEFT: Appointment day view -->
           <div class="dash-panel">
             <div class="dash-panel-header">
-              <span class="dash-panel-title"><i class="ti ti-brand-whatsapp" style="color:var(--teal-mid)"></i> Today\u2019s reminders</span>
-              <button class="dash-panel-link" @click="$router.push('/queue')">View all \u2192</button>
+              <span class="dash-panel-title"><i class="ti ti-calendar" style="color:var(--teal-mid)"></i> Appointments</span>
+              <div style="display:flex;align-items:center;gap:6px">
+                <button class="date-nav-btn" @click="prevDay" style="width:24px;height:24px;font-size:12px"><i class="ti ti-chevron-left"></i></button>
+                <span style="font-size:12px;font-weight:500;color:var(--text-secondary)">{{ apptDateLabel }}</span>
+                <button class="date-nav-btn" @click="nextDay" style="width:24px;height:24px;font-size:12px"><i class="ti ti-chevron-right"></i></button>
+                <button class="appt-today-btn" v-if="!isApptToday" @click="goToday">Today</button>
+                <button class="dash-action-btn" style="padding:3px 10px;font-size:11px" @click="$router.push('/appointments/new')"><i class="ti ti-plus"></i> Book</button>
+              </div>
             </div>
-            <div class="loading-wrap" style="padding:24px" v-if="loadingQ"><i class="ti ti-loader spin"></i></div>
+            <div class="loading-wrap" style="padding:24px" v-if="apptsLoading"><i class="ti ti-loader spin"></i></div>
+            <div class="dash-panel-empty" v-else-if="appts.length===0">
+              <i class="ti ti-calendar" style="font-size:24px;opacity:.35"></i><br>No appointments for this day
+              <br><button class="btn btn-primary btn-sm" style="margin-top:10px" @click="$router.push('/appointments/new')">Book one</button>
+            </div>
+            <template v-else>
+              <div v-for="group in apptsByDoctor" :key="group.doctor">
+                <div style="padding:7px 14px;background:#f8faf9;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.04em">
+                  {{ group.doctor }}
+                  <span style="font-weight:400;color:var(--text-muted)"> \u00b7 {{ group.appts.filter(a=>a.status==='scheduled').length }} waiting</span>
+                </div>
+                <div class="dash-panel-row" v-for="(appt,i) in group.appts" :key="appt.id"
+                     :style="appt.status==='cancelled'?'opacity:.45':appt.status==='seen'?'opacity:.65':''">
+                  <span style="font-size:11px;font-weight:700;color:var(--text-muted);width:18px;flex-shrink:0">{{ i+1 }}</span>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13px;font-weight:500">{{ appt.patientName }}<span class="walkin-badge" v-if="appt.isWalkIn">Walk-in</span></div>
+                    <div style="font-size:11px;color:var(--text-muted)">{{ apptTypeLbl(appt.type) }}</div>
+                  </div>
+                  <span class="pill" :class="statusCls(appt.status)" style="font-size:10px;flex-shrink:0">{{ statusTxt(appt.status) }}</span>
+                  <template v-if="appt.status==='scheduled'">
+                    <a v-if="apptWaLink(appt)" :href="apptWaLink(appt)" target="_blank" class="action-btn action-btn-wa" style="flex-shrink:0" title="WA reminder"><i class="ti ti-brand-whatsapp"></i></a>
+                    <button class="action-btn" style="flex-shrink:0;color:var(--teal-mid);border-color:var(--teal-border);font-size:11px" @click="markSeen(appt)" :disabled="savingApptId===appt.id"><i class="ti ti-check"></i> Seen</button>
+                    <button class="action-btn" style="flex-shrink:0;color:var(--amber-mid);border-color:var(--amber-border)" @click="markNoShow(appt)" :disabled="savingApptId===appt.id" title="No-show"><i class="ti ti-user-x"></i></button>
+                    <button class="action-btn action-btn-flag" style="flex-shrink:0" @click="cancelAppt(appt)" :disabled="savingApptId===appt.id" title="Cancel"><i class="ti ti-x"></i></button>
+                  </template>
+                  <button v-else-if="appt.status==='seen'&&appt.patientId" class="action-btn" style="flex-shrink:0;font-size:11px" @click="$router.push('/encounters/new?patientId='+appt.patientId)"><i class="ti ti-stethoscope"></i></button>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- RIGHT: Reminders -->
+          <div class="dash-panel">
+            <div class="dash-panel-header">
+              <span class="dash-panel-title"><i class="ti ti-brand-whatsapp" style="color:#25D366"></i> Reminders to send</span>
+              <span style="font-size:12px;color:var(--text-muted)">{{ reminders.length }} pending</span>
+            </div>
+            <div class="loading-wrap" style="padding:24px" v-if="remindersLoading"><i class="ti ti-loader spin"></i></div>
             <div class="dash-panel-empty" v-else-if="reminders.length===0">
-              <i class="ti ti-circle-check" style="font-size:22px;color:var(--teal-mid)"></i><br>All clear — no pending reminders
+              <i class="ti ti-circle-check" style="font-size:24px;color:var(--teal-mid);opacity:.7"></i><br>All clear \u2014 no pending reminders
             </div>
             <template v-else>
               <div class="dash-panel-row" v-for="r in reminders" :key="r.id">
-                <div class="avatar avatar-sm" :class="pillCls(r.followupType)==='pill-teal'?'avatar-teal':'avatar-blue'">{{ initials(r.patientName) }}</div>
+                <div class="avatar avatar-sm" :class="avCls(r.patientName)">{{ initials(r.patientName) }}</div>
                 <div style="flex:1;min-width:0">
-                  <div style="font-weight:500;font-size:13px">{{ r.patientName }}</div>
-                  <div style="font-size:11px;color:var(--text-muted)">{{ r.subType }}</div>
+                  <div style="font-size:13px;font-weight:500">{{ r.patientName }}</div>
+                  <div style="font-size:11px;color:var(--text-muted)">{{ r.subType }} \u00b7 {{ fmtDate(r.dueDate) }}</div>
                 </div>
-                <span class="pill" :class="pillCls(r.followupType)" style="font-size:10px;flex-shrink:0">{{ pillTxt(r.followupType) }}</span>
+                <span class="pill" :class="rPillCls(r.followupType)" style="font-size:10px;flex-shrink:0">{{ rPillTxt(r.followupType) }}</span>
                 <a v-if="waLink(r)" :href="waLink(r)" target="_blank" class="action-btn action-btn-wa" style="flex-shrink:0"><i class="ti ti-brand-whatsapp"></i></a>
-                <button class="action-btn" style="flex-shrink:0;border-color:var(--teal-border);color:var(--teal-mid)" @click="markSent(r)"><i class="ti ti-check"></i></button>
-              </div>
-            </template>
-          </div>
-
-          <!-- Right: recent invoices (doctor) or follow-ups (staff) -->
-          <div class="dash-panel" v-if="role==='doctor'">
-            <div class="dash-panel-header">
-              <span class="dash-panel-title"><i class="ti ti-receipt" style="color:var(--teal-mid)"></i> Recent invoices</span>
-              <button class="dash-panel-link" @click="$router.push('/billing')">View all \u2192</button>
-            </div>
-            <div class="loading-wrap" style="padding:24px" v-if="loadingInv"><i class="ti ti-loader spin"></i></div>
-            <div class="dash-panel-empty" v-else-if="recentInvoices.length===0">No invoices yet</div>
-            <template v-else>
-              <div class="dash-panel-row" v-for="inv in recentInvoices" :key="inv.id" style="cursor:pointer" @click="$router.push('/billing/'+inv.id)">
-                <div style="flex:1;min-width:0">
-                  <div style="font-weight:500;font-size:13px">{{ inv.patientName }}</div>
-                  <div style="font-size:11px;color:var(--text-muted)">{{ inv.invoiceNumber }} \u00b7 {{ fmtDate(inv.date) }}</div>
-                </div>
-                <div style="font-weight:600;color:var(--teal-mid);flex-shrink:0">{{ fmtAmt(inv.totalAmount) }}</div>
-              </div>
-            </template>
-          </div>
-
-          <div class="dash-panel" v-else>
-            <div class="dash-panel-header">
-              <span class="dash-panel-title"><i class="ti ti-calendar" style="color:var(--teal-mid)"></i> Today’s appointments</span>
-              <button class="dash-panel-link" @click="$router.push('/appointments')">View all →</button>
-            </div>
-            <div class="loading-wrap" style="padding:20px" v-if="loadingAppts"><i class="ti ti-loader spin"></i></div>
-            <div class="dash-panel-empty" v-else-if="todayAppts.length===0"><i class="ti ti-calendar" style="font-size:20px;opacity:.4"></i><br>No appointments today</div>
-            <template v-else>
-              <div class="dash-panel-row" v-for="a in todayAppts.slice(0,6)" :key="a.id">
-                <div style="flex:1;min-width:0">
-                  <div style="font-weight:500;font-size:13px">{{ a.patientName }}<span class="walkin-badge" v-if="a.isWalkIn">Walk-in</span></div>
-                  <div style="font-size:11px;color:var(--text-muted)">{{ a.doctorName }}</div>
-                </div>
-                <span class="pill" style="font-size:10px;flex-shrink:0" :class="({scheduled:'pill-teal',seen:'pill-green',no_show:'pill-amber',cancelled:'pill-gray'})[a.status]||'pill-gray'">{{ ({scheduled:'Scheduled',seen:'Seen',no_show:'No-show',cancelled:'Cancelled'})[a.status]||a.status }}</span>
+                <button class="action-btn" style="flex-shrink:0;color:var(--teal-mid);border-color:var(--teal-border)" @click="markSent(r)" title="Mark sent"><i class="ti ti-check"></i></button>
+                <button class="action-btn" style="flex-shrink:0;color:var(--text-muted)" @click="skipReminder(r)" title="Skip">Skip</button>
               </div>
             </template>
           </div>
@@ -2011,260 +2053,91 @@ const Dashboard = {
   `
 };
 
-
-const WorkQueue = {
-  name: 'WorkQueue',
-  data() {
-    return {
-      loading: true, loadError: null,
-      reminders: [], missed: [], highRisk: [],
-      lastRefreshed: null,
-      showAllReminders: false, showAllMissed: false
-    };
-  },
-  computed: {
-    todayLabel() {
-      return new Date().toLocaleDateString('en-IN', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-      });
-    },
-    totalTasks()       { return this.reminders.length + this.missed.length + this.highRisk.length; },
-    visibleReminders() { return this.showAllReminders ? this.reminders : this.reminders.slice(0, 5); },
-    visibleMissed()    { return this.showAllMissed    ? this.missed    : this.missed.slice(0, 5); }
-  },
-  methods: {
-    async loadQueue() {
-      this.loading = true; this.loadError = null;
-      try {
-        const [reminders, allMissed] = await Promise.all([
-          getTodaysPendingReminders(),
-          getMissedFollowups()
-        ]);
-        this.reminders = reminders;
-        const withDays = allMissed.map(fc => ({ ...fc, _daysOver: this.daysOver(fc.dueDate) }));
-        this.missed    = withDays.filter(fc => fc._daysOver < 7);
-        this.highRisk  = withDays.filter(fc => fc._daysOver >= 7)
-                                 .sort((a, b) => b._daysOver - a._daysOver);
-        this.lastRefreshed = new Date().toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
-      } catch(e) {
-        this.loadError = 'Could not load work queue. Check your connection.';
-      } finally { this.loading = false; }
-    },
-    async markSent(reminder) {
-      try {
-        await updateReminderStatus(reminder.id, 'sent');
-        this.reminders = this.reminders.filter(r => r.id !== reminder.id);
-      } catch(e) { alert('Error marking as sent.'); }
-    },
-    async markSkipped(reminder) {
-      try {
-        await updateReminderStatus(reminder.id, 'skipped');
-        this.reminders = this.reminders.filter(r => r.id !== reminder.id);
-      } catch(e) { alert('Error.'); }
-    },
-    daysOver(dueDate) {
-      if (!dueDate) return 0;
-      const [y1,m1,d1] = todayIso().split('-').map(Number);
-      const [y2,m2,d2] = dueDate.split('-').map(Number);
-      return Math.max(0, Math.floor(
-        (new Date(y1,m1-1,d1) - new Date(y2,m2-1,d2)) / 86400000
-      ));
-    },
-    waLink(r)          { return buildReminderWaLink(r); },
-    initials(name)     { return patientInitials(name); },
-    avCls(name, risk)  {
-      if (risk === 'high')   return 'avatar-red';
-      if (risk === 'missed') return 'avatar-amber';
-      return patientAvatarClass(name);
-    },
-    fmtDate(d)         { return fmtDateShort(d); },
-    typePillText(t)    {
-      return { anc:'ANC', vaccination:'Vaccine', post_procedure:'Post-op', annual_recall:'Recall' }[t] || 'Follow-up';
-    },
-    typePillCls(t)     {
-      return { anc:'pill-teal', vaccination:'pill-blue', post_procedure:'pill-gray', annual_recall:'pill-gray' }[t] || 'pill-gray';
-    },
-    overdueText(d)     { return d === 1 ? '1 day over' : d + ' days over'; }
-  },
-  mounted() { this.loadQueue(); },
-  template: `
-    <div class="screen">
-      <div class="topbar">
-        <div class="topbar-left">
-          <h1>Today\u2019s work queue</h1>
-          <p>{{ todayLabel }}</p>
-        </div>
-        <div class="topbar-right">
-          <button class="btn btn-secondary btn-sm" @click="loadQueue" :disabled="loading">
-            <i class="ti ti-refresh"></i> Refresh
-          </button>
-          <button class="btn btn-primary" @click="$router.push('/patients/new')">
-            <i class="ti ti-user-plus"></i> New patient
-          </button>
-        </div>
-      </div>
-
-      <div class="content">
-        <div class="loading-wrap" v-if="loading"><i class="ti ti-loader spin"></i> Loading queue\u2026</div>
-        <div class="empty-section" v-else-if="loadError">
-          <i class="ti ti-alert-triangle"></i><p>{{ loadError }}</p>
-          <button class="btn btn-secondary" style="margin-top:14px" @click="loadQueue">Try again</button>
-        </div>
-
-        <template v-else>
-          <div class="stat-grid">
-            <div class="stat-card stat-teal">
-              <div class="stat-label">Reminders due</div>
-              <div class="stat-value">{{ reminders.length }}</div>
-            </div>
-            <div class="stat-card stat-amber">
-              <div class="stat-label">Missed follow-ups</div>
-              <div class="stat-value">{{ missed.length }}</div>
-            </div>
-            <div class="stat-card stat-red">
-              <div class="stat-label">Overdue 7+ days</div>
-              <div class="stat-value">{{ highRisk.length }}</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Last refreshed</div>
-              <div class="stat-value" style="font-size:14px;color:var(--text-secondary)">{{ lastRefreshed || '\u2014' }}</div>
-            </div>
-          </div>
-
-          <div class="empty-section" v-if="totalTasks === 0" style="padding:60px 20px">
-            <i class="ti ti-circle-check" style="font-size:40px;color:var(--teal-mid);opacity:.7"></i>
-            <h2 style="color:var(--teal-mid);font-size:18px;margin-top:8px">All clear</h2>
-            <p>No pending reminders or missed follow-ups for today</p>
-          </div>
-
-          <template v-else>
-
-            <template v-if="reminders.length > 0">
-              <div class="section-header">
-                <div class="section-title">
-                  <i class="ti ti-brand-whatsapp" style="color:var(--teal-mid)"></i>
-                  Reminders to send
-                </div>
-                <div class="section-count">{{ reminders.length }} pending</div>
-              </div>
-              <div class="card-list" style="margin-bottom:18px">
-                <div class="card-list-row" v-for="r in visibleReminders" :key="r.id">
-                  <div class="avatar avatar-sm" :class="avCls(r.patientName, 'reminder')">{{ initials(r.patientName) }}</div>
-                  <div class="row-info">
-                    <div class="row-name">{{ r.patientName }}</div>
-                    <div class="row-detail">{{ r.subType }} &middot; due {{ fmtDate(r.dueDate) }}</div>
-                  </div>
-                  <span class="pill" :class="typePillCls(r.followupType)" style="flex-shrink:0">{{ typePillText(r.followupType) }}</span>
-                  <a v-if="waLink(r)" :href="waLink(r)" target="_blank" class="action-btn action-btn-wa">
-                    <i class="ti ti-brand-whatsapp"></i> Send
-                  </a>
-                  <span v-else class="pill pill-gray" style="font-size:10px" title="No WA consent or mobile">No WA</span>
-                  <button class="action-btn action-btn-call" @click="markSent(r)">
-                    <i class="ti ti-check"></i> Sent
-                  </button>
-                  <button class="action-btn" style="border-color:var(--border-mid);color:var(--text-muted)" @click="markSkipped(r)">
-                    Skip
-                  </button>
-                </div>
-                <div class="row-more" v-if="reminders.length > 5">
-                  <button style="background:none;border:none;font-size:12px;color:var(--teal-mid);cursor:pointer" @click="showAllReminders=!showAllReminders">
-                    {{ showAllReminders ? 'Show less' : '+ ' + (reminders.length - 5) + ' more reminders' }}
-                  </button>
-                </div>
-              </div>
-            </template>
-
-            <template v-if="missed.length > 0">
-              <div class="section-header">
-                <div class="section-title">
-                  <i class="ti ti-phone" style="color:var(--amber-mid)"></i>
-                  Missed follow-ups \u2014 call today
-                </div>
-                <div class="section-count">{{ missed.length }} patients</div>
-              </div>
-              <div class="card-list" style="margin-bottom:18px">
-                <div class="card-list-row" v-for="fc in visibleMissed" :key="fc.id">
-                  <div class="avatar avatar-sm avatar-amber">{{ initials(fc.patientName) }}</div>
-                  <div class="row-info">
-                    <div class="row-name">{{ fc.patientName }}</div>
-                    <div class="row-detail">{{ fc.subType }} &middot; was due {{ fmtDate(fc.dueDate) }}</div>
-                  </div>
-                  <span class="pill pill-amber" style="flex-shrink:0">{{ overdueText(fc._daysOver) }}</span>
-                  <button class="action-btn action-btn-call" @click="$router.push('/followups/'+fc.id)">
-                    <i class="ti ti-arrow-right"></i> View
-                  </button>
-                </div>
-                <div class="row-more" v-if="missed.length > 5">
-                  <button style="background:none;border:none;font-size:12px;color:var(--teal-mid);cursor:pointer" @click="showAllMissed=!showAllMissed">
-                    {{ showAllMissed ? 'Show less' : '+ ' + (missed.length - 5) + ' more patients' }}
-                  </button>
-                </div>
-              </div>
-            </template>
-
-            <template v-if="highRisk.length > 0">
-              <div class="section-header">
-                <div class="section-title">
-                  <i class="ti ti-alert-triangle" style="color:var(--red-mid)"></i>
-                  High-risk overdue
-                </div>
-                <div class="section-count">{{ highRisk.length }} patients &middot; 7+ days</div>
-              </div>
-              <div class="card-list">
-                <div class="card-list-row" v-for="fc in highRisk" :key="fc.id">
-                  <div class="avatar avatar-sm avatar-red">{{ initials(fc.patientName) }}</div>
-                  <div class="row-info">
-                    <div class="row-name">{{ fc.patientName }}</div>
-                    <div class="row-detail">{{ fc.subType }} &middot; was due {{ fmtDate(fc.dueDate) }}</div>
-                  </div>
-                  <span class="pill pill-red" style="flex-shrink:0">{{ overdueText(fc._daysOver) }}</span>
-                  <button class="action-btn action-btn-flag" @click="$router.push('/followups/'+fc.id)">
-                    <i class="ti ti-flag"></i> Escalate
-                  </button>
-                </div>
-              </div>
-            </template>
-
-          </template>
-        </template>
-      </div>
-    </div>
-  `
-};
 
 const FollowupList = {
   name: 'FollowupList',
   data() {
     return {
-      allCases: [], loading: true, loadError: null,
+      view: 'queue',
+      // Queue view
+      qReminders: [], qMissed: [], qHighRisk: [],
+      qLoading: true, qError: null,
+      qLastRefreshed: null, showAllR: false, showAllM: false,
+      // Cases view
+      allCases: [], casesLoading: false, casesError: null,
       query: '', filterType: 'all', filterStatus: 'active'
     };
   },
   computed: {
-    filtered() {
-      let cases = this.allCases;
-      if (this.filterStatus !== 'all') cases = cases.filter(fc => fc.status === this.filterStatus);
-      if (this.filterType   !== 'all') cases = cases.filter(fc => fc.followupType === this.filterType);
+    todayLabel() {
+      return new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    },
+    totalTasks()   { return this.qReminders.length + this.qMissed.length + this.qHighRisk.length; },
+    visibleR()     { return this.showAllR ? this.qReminders : this.qReminders.slice(0,5); },
+    visibleM()     { return this.showAllM ? this.qMissed    : this.qMissed.slice(0,5); },
+    filteredCases() {
+      let c = this.allCases;
+      if (this.filterStatus !== 'all') c = c.filter(fc => fc.status === this.filterStatus);
+      if (this.filterType   !== 'all') c = c.filter(fc => fc.followupType === this.filterType);
       if (this.query.trim()) {
         const q = this.query.toLowerCase();
-        cases = cases.filter(fc => (fc.patientName||'').toLowerCase().includes(q) || (fc.patientId||'').toLowerCase().includes(q));
+        c = c.filter(fc => (fc.patientName||'').toLowerCase().includes(q)||(fc.patientId||'').toLowerCase().includes(q));
       }
-      return cases.sort((a,b) => (a.dueDate||'').localeCompare(b.dueDate||''));
+      return c.sort((a,b) => (a.dueDate||'').localeCompare(b.dueDate||''));
     },
-    overdueCnt() { const t = todayIso(); return this.allCases.filter(fc=>fc.status==='active'&&fc.dueDate<t).length; }
+    overdueCnt() {
+      const t = todayIso();
+      return this.allCases.filter(fc => fc.status==='active' && fc.dueDate < t).length;
+    }
   },
   methods: {
-    async load() {
-      this.loading=true; this.loadError=null;
+    async switchView(v) {
+      this.view = v;
+      if (v === 'queue' && !this.qLastRefreshed) await this.loadQueue();
+      if (v === 'cases' && !this.allCases.length)  await this.loadCases();
+    },
+    // Queue methods
+    async loadQueue() {
+      this.qLoading=true; this.qError=null;
+      try {
+        const [reminders, allMissed] = await Promise.all([getTodaysPendingReminders(), getMissedFollowups()]);
+        this.qReminders = reminders;
+        const withDays = allMissed.map(fc => ({...fc, _daysOver: this.daysOver(fc.dueDate)}));
+        this.qMissed   = withDays.filter(fc => fc._daysOver < 7);
+        this.qHighRisk = withDays.filter(fc => fc._daysOver >= 7).sort((a,b) => b._daysOver-a._daysOver);
+        this.qLastRefreshed = new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
+      } catch(e) { this.qError='Could not load queue.'; }
+      finally { this.qLoading=false; }
+    },
+    async markSent(r) {
+      try { await updateReminderStatus(r.id,'sent');    this.qReminders=this.qReminders.filter(x=>x.id!==r.id); }
+      catch(e) { alert('Error.'); }
+    },
+    async markSkipped(r) {
+      try { await updateReminderStatus(r.id,'skipped'); this.qReminders=this.qReminders.filter(x=>x.id!==r.id); }
+      catch(e) { alert('Error.'); }
+    },
+    daysOver(dueDate) {
+      if (!dueDate) return 0;
+      const [y1,m1,d1] = todayIso().split('-').map(Number);
+      const [y2,m2,d2] = dueDate.split('-').map(Number);
+      return Math.max(0, Math.floor((new Date(y1,m1-1,d1)-new Date(y2,m2-1,d2))/86400000));
+    },
+    waLink(r)      { return buildReminderWaLink(r); },
+    // Cases methods
+    async loadCases() {
+      this.casesLoading=true; this.casesError=null;
       try {
         const snap = await db.collection('followupCases').get();
         this.allCases = snap.docs.map(d=>({id:d.id,...d.data()}));
-      } catch(e){ this.loadError='Could not load follow-ups.'; }
-      finally { this.loading=false; }
+      } catch(e) { this.casesError='Could not load follow-ups.'; }
+      finally { this.casesLoading=false; }
     },
-    fmtDate(d)  { return fmtDateShort(d); },
-    typePill(t) { return {anc:'pill-teal',vaccination:'pill-blue',post_procedure:'pill-gray',annual_recall:'pill-gray'}[t]||'pill-gray'; },
-    typeTxt(t)  { return {anc:'ANC',vaccination:'Vaccine',post_procedure:'Post-op',annual_recall:'Recall'}[t]||'Follow-up'; },
+    fmtDate(d)   { return fmtDateShort(d); },
+    typePill(t)  { return {anc:'pill-teal',vaccination:'pill-blue',post_procedure:'pill-gray',annual_recall:'pill-gray'}[t]||'pill-gray'; },
+    typeTxt(t)   { return {anc:'ANC',vaccination:'Vaccine',post_procedure:'Post-op',annual_recall:'Recall'}[t]||'Follow-up'; },
+    initials(n)  { return patientInitials(n); },
+    avCls(n)     { return patientAvatarClass(n); },
     statusCls(fc) {
       if (fc.status==='completed') return 'pill-green';
       if (fc.status==='declined')  return 'pill-gray';
@@ -2280,62 +2153,158 @@ const FollowupList = {
     dueCls(fc) {
       if (fc.status !== 'active') return '';
       return fc.dueDate < todayIso() ? 'color:var(--red-mid)' : '';
-    }
+    },
+    pillCls(t)  { return {anc:'pill-teal',vaccination:'pill-blue',post_procedure:'pill-gray',annual_recall:'pill-gray'}[t]||'pill-gray'; },
+    pillTxt(t)  { return {anc:'ANC',vaccination:'Vaccine',post_procedure:'Post-op',annual_recall:'Recall'}[t]||'Follow-up'; },
+    overdueText(d) { return d===1 ? '1 day over' : d+' days over'; }
   },
-  mounted() { this.load(); },
+  mounted() { this.loadQueue(); },
   template: `
     <div class="screen">
       <div class="topbar">
-        <div class="topbar-left"><h1>Follow-ups</h1></div>
+        <div class="topbar-left">
+          <h1>Follow-ups</h1>
+          <p v-if="view==='queue'">{{ todayLabel }}</p>
+        </div>
         <div class="topbar-right">
+          <button class="btn btn-secondary btn-sm" v-if="view==='queue'" @click="loadQueue" :disabled="qLoading"><i class="ti ti-refresh"></i> Refresh</button>
           <button class="btn btn-primary" @click="$router.push('/followups/new')"><i class="ti ti-plus"></i> New follow-up</button>
         </div>
       </div>
       <div class="content">
-        <div class="search-wrap" style="margin-bottom:10px">
-          <i class="ti ti-search"></i>
-          <input type="text" v-model="query" class="search-input" placeholder="Search by patient name or ID\u2026" />
-          <button class="search-clear" v-if="query" @click="query=''"><i class="ti ti-x"></i></button>
+
+        <!-- View toggle -->
+        <div class="config-tab-bar" style="margin-bottom:14px">
+          <button class="config-tab" :class="{on:view==='queue'}" @click="switchView('queue')"><i class="ti ti-layout-list"></i> Today\u2019s queue</button>
+          <button class="config-tab" :class="{on:view==='cases'}" @click="switchView('cases')"><i class="ti ti-table"></i> All cases</button>
         </div>
-        <div class="filter-bar" style="margin-bottom:12px">
-          <button class="filter-btn" :class="{on:filterStatus==='all'}"       @click="filterStatus='all'">All statuses</button>
-          <button class="filter-btn" :class="{on:filterStatus==='active'}"    @click="filterStatus='active'">Active</button>
-          <button class="filter-btn" :class="{on:filterStatus==='completed'}" @click="filterStatus='completed'">Completed</button>
-          <span style="width:1px;background:var(--border);margin:0 6px;align-self:stretch"></span>
-          <button class="filter-btn" :class="{on:filterType==='all'}"              @click="filterType='all'">All types</button>
-          <button class="filter-btn" :class="{on:filterType==='anc'}"              @click="filterType='anc'">ANC</button>
-          <button class="filter-btn" :class="{on:filterType==='vaccination'}"      @click="filterType='vaccination'">Vaccine</button>
-          <button class="filter-btn" :class="{on:filterType==='post_procedure'}"   @click="filterType='post_procedure'">Post-op</button>
-          <button class="filter-btn" :class="{on:filterType==='annual_recall'}"    @click="filterType='annual_recall'">Recall</button>
-        </div>
-        <div class="loading-wrap" v-if="loading"><i class="ti ti-loader spin"></i> Loading\u2026</div>
-        <div class="empty-section" v-else-if="loadError"><i class="ti ti-alert-triangle"></i><p>{{ loadError }}</p></div>
-        <template v-else>
-          <p class="results-meta">{{ filtered.length }} case{{ filtered.length===1?'':'s' }}<span v-if="overdueCnt" style="color:var(--red-mid);margin-left:8px">\u00b7 {{ overdueCnt }} overdue</span></p>
-          <div class="table-wrap">
-            <table class="data-table">
-              <thead><tr>
-                <th>Patient</th><th>Type</th><th>Detail</th><th>Doctor</th><th>Due date</th><th>Status</th><th style="width:40px"></th>
-              </tr></thead>
-              <tbody>
-                <tr class="trow" v-for="fc in filtered" :key="fc.id" @click="$router.push('/followups/'+fc.id)">
-                  <td class="td-name">{{ fc.patientName }}<div class="td-muted" style="font-size:11px">{{ fc.patientId }}</div></td>
-                  <td><span class="pill" :class="typePill(fc.followupType)" style="font-size:10px">{{ typeTxt(fc.followupType) }}</span></td>
-                  <td class="td-muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fc.subType||'\u2014' }}</td>
-                  <td class="td-muted">{{ fc.doctorName||'\u2014' }}</td>
-                  <td :style="dueCls(fc)">{{ fmtDate(fc.dueDate) }}</td>
-                  <td><span class="pill" :class="statusCls(fc)" style="font-size:10px">{{ statusTxt(fc) }}</span></td>
-                  <td><i class="ti ti-chevron-right" style="color:var(--text-muted);font-size:13px"></i></td>
-                </tr>
-                <tr v-if="filtered.length===0"><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted)">No follow-up cases match your filters</td></tr>
-              </tbody>
-            </table>
-          </div>
+
+        <!-- ═══ QUEUE VIEW ═══ -->
+        <template v-if="view==='queue'">
+          <div class="loading-wrap" v-if="qLoading"><i class="ti ti-loader spin"></i> Loading queue\u2026</div>
+          <div class="empty-section" v-else-if="qError"><i class="ti ti-alert-triangle"></i><p>{{ qError }}</p></div>
+          <template v-else>
+            <div class="stat-grid">
+              <div class="stat-card stat-teal"><div class="stat-label">Reminders due</div><div class="stat-value">{{ qReminders.length }}</div></div>
+              <div class="stat-card stat-amber"><div class="stat-label">Missed follow-ups</div><div class="stat-value">{{ qMissed.length }}</div></div>
+              <div class="stat-card stat-red"><div class="stat-label">High-risk (7+ days)</div><div class="stat-value">{{ qHighRisk.length }}</div></div>
+              <div class="stat-card"><div class="stat-label">Last refreshed</div><div class="stat-value" style="font-size:14px;color:var(--text-secondary)">{{ qLastRefreshed||'\u2014' }}</div></div>
+            </div>
+            <div class="empty-section" v-if="totalTasks===0" style="padding:60px 20px">
+              <i class="ti ti-circle-check" style="font-size:40px;color:var(--teal-mid);opacity:.7"></i>
+              <h2 style="color:var(--teal-mid);font-size:18px;margin-top:8px">All clear</h2>
+              <p>No pending reminders or missed follow-ups for today</p>
+            </div>
+            <template v-else>
+              <!-- Reminders -->
+              <template v-if="qReminders.length">
+                <div class="section-header">
+                  <div class="section-title"><i class="ti ti-brand-whatsapp" style="color:var(--teal-mid)"></i> Reminders to send</div>
+                  <div class="section-count">{{ qReminders.length }} pending</div>
+                </div>
+                <div class="card-list" style="margin-bottom:18px">
+                  <div class="card-list-row" v-for="r in visibleR" :key="r.id">
+                    <div class="avatar avatar-sm" :class="avCls(r.patientName)">{{ initials(r.patientName) }}</div>
+                    <div class="row-info"><div class="row-name">{{ r.patientName }}</div><div class="row-detail">{{ r.subType }} \u00b7 due {{ fmtDate(r.dueDate) }}</div></div>
+                    <span class="pill" :class="pillCls(r.followupType)" style="flex-shrink:0">{{ pillTxt(r.followupType) }}</span>
+                    <a v-if="waLink(r)" :href="waLink(r)" target="_blank" class="action-btn action-btn-wa"><i class="ti ti-brand-whatsapp"></i> Send</a>
+                    <span v-else class="pill pill-gray" style="font-size:10px">No WA</span>
+                    <button class="action-btn action-btn-call" @click="markSent(r)"><i class="ti ti-check"></i> Sent</button>
+                    <button class="action-btn" style="border-color:var(--border-mid);color:var(--text-muted)" @click="markSkipped(r)">Skip</button>
+                  </div>
+                  <div class="row-more" v-if="qReminders.length>5">
+                    <button style="background:none;border:none;font-size:12px;color:var(--teal-mid);cursor:pointer" @click="showAllR=!showAllR">
+                      {{ showAllR ? 'Show less' : '+ '+(qReminders.length-5)+' more' }}
+                    </button>
+                  </div>
+                </div>
+              </template>
+              <!-- Missed -->
+              <template v-if="qMissed.length">
+                <div class="section-header">
+                  <div class="section-title"><i class="ti ti-phone" style="color:var(--amber-mid)"></i> Missed follow-ups</div>
+                  <div class="section-count">{{ qMissed.length }} patients</div>
+                </div>
+                <div class="card-list" style="margin-bottom:18px">
+                  <div class="card-list-row" v-for="fc in visibleM" :key="fc.id">
+                    <div class="avatar avatar-sm avatar-amber">{{ initials(fc.patientName) }}</div>
+                    <div class="row-info"><div class="row-name">{{ fc.patientName }}</div><div class="row-detail">{{ fc.subType }} \u00b7 was due {{ fmtDate(fc.dueDate) }}</div></div>
+                    <span class="pill pill-amber" style="flex-shrink:0">{{ overdueText(fc._daysOver) }}</span>
+                    <button class="action-btn action-btn-call" @click="$router.push('/followups/'+fc.id)"><i class="ti ti-arrow-right"></i> View</button>
+                  </div>
+                  <div class="row-more" v-if="qMissed.length>5">
+                    <button style="background:none;border:none;font-size:12px;color:var(--teal-mid);cursor:pointer" @click="showAllM=!showAllM">
+                      {{ showAllM ? 'Show less' : '+ '+(qMissed.length-5)+' more' }}
+                    </button>
+                  </div>
+                </div>
+              </template>
+              <!-- High-risk -->
+              <template v-if="qHighRisk.length">
+                <div class="section-header">
+                  <div class="section-title"><i class="ti ti-alert-triangle" style="color:var(--red-mid)"></i> High-risk overdue</div>
+                  <div class="section-count">{{ qHighRisk.length }} patients \u00b7 7+ days</div>
+                </div>
+                <div class="card-list">
+                  <div class="card-list-row" v-for="fc in qHighRisk" :key="fc.id">
+                    <div class="avatar avatar-sm avatar-red">{{ initials(fc.patientName) }}</div>
+                    <div class="row-info"><div class="row-name">{{ fc.patientName }}</div><div class="row-detail">{{ fc.subType }} \u00b7 was due {{ fmtDate(fc.dueDate) }}</div></div>
+                    <span class="pill pill-red" style="flex-shrink:0">{{ overdueText(fc._daysOver) }}</span>
+                    <button class="action-btn action-btn-flag" @click="$router.push('/followups/'+fc.id)"><i class="ti ti-flag"></i> Escalate</button>
+                  </div>
+                </div>
+              </template>
+            </template>
+          </template>
         </template>
+
+        <!-- ═══ CASES VIEW ═══ -->
+        <template v-if="view==='cases'">
+          <div class="search-wrap" style="margin-bottom:10px">
+            <i class="ti ti-search"></i>
+            <input type="text" v-model="query" class="search-input" placeholder="Search by patient name or ID\u2026" />
+            <button class="search-clear" v-if="query" @click="query=''"><i class="ti ti-x"></i></button>
+          </div>
+          <div class="filter-bar" style="margin-bottom:12px">
+            <button class="filter-btn" :class="{on:filterStatus==='all'}"       @click="filterStatus='all'">All</button>
+            <button class="filter-btn" :class="{on:filterStatus==='active'}"    @click="filterStatus='active'">Active</button>
+            <button class="filter-btn" :class="{on:filterStatus==='completed'}" @click="filterStatus='completed'">Completed</button>
+            <span style="width:1px;background:var(--border);margin:0 6px;align-self:stretch"></span>
+            <button class="filter-btn" :class="{on:filterType==='all'}"             @click="filterType='all'">All types</button>
+            <button class="filter-btn" :class="{on:filterType==='anc'}"             @click="filterType='anc'">ANC</button>
+            <button class="filter-btn" :class="{on:filterType==='vaccination'}"     @click="filterType='vaccination'">Vaccine</button>
+            <button class="filter-btn" :class="{on:filterType==='post_procedure'}"  @click="filterType='post_procedure'">Post-op</button>
+            <button class="filter-btn" :class="{on:filterType==='annual_recall'}"   @click="filterType='annual_recall'">Recall</button>
+          </div>
+          <div class="loading-wrap" v-if="casesLoading"><i class="ti ti-loader spin"></i></div>
+          <div class="empty-section" v-else-if="casesError"><i class="ti ti-alert-triangle"></i><p>{{ casesError }}</p></div>
+          <template v-else>
+            <p class="results-meta">{{ filteredCases.length }} case{{ filteredCases.length===1?'':'s' }}<span v-if="overdueCnt" style="color:var(--red-mid);margin-left:8px">\u00b7 {{ overdueCnt }} overdue</span></p>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead><tr><th>Patient</th><th>Type</th><th>Detail</th><th>Doctor</th><th>Due date</th><th>Status</th><th style="width:40px"></th></tr></thead>
+                <tbody>
+                  <tr class="trow" v-for="fc in filteredCases" :key="fc.id" @click="$router.push('/followups/'+fc.id)">
+                    <td class="td-name">{{ fc.patientName }}<div class="td-muted" style="font-size:11px">{{ fc.patientId }}</div></td>
+                    <td><span class="pill" :class="typePill(fc.followupType)" style="font-size:10px">{{ typeTxt(fc.followupType) }}</span></td>
+                    <td class="td-muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fc.subType||'\u2014' }}</td>
+                    <td class="td-muted">{{ fc.doctorName||'\u2014' }}</td>
+                    <td :style="dueCls(fc)">{{ fmtDate(fc.dueDate) }}</td>
+                    <td><span class="pill" :class="statusCls(fc)" style="font-size:10px">{{ statusTxt(fc) }}</span></td>
+                    <td><i class="ti ti-chevron-right" style="color:var(--text-muted);font-size:13px"></i></td>
+                  </tr>
+                  <tr v-if="filteredCases.length===0"><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted)">No cases match your filters</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
+        </template>
+
       </div>
     </div>
   `
 };
+
 
 const Encounter = {
   name: 'Encounter',
@@ -3024,9 +2993,9 @@ const router = VueRouter.createRouter({
   history: VueRouter.createWebHashHistory(),
   routes: [
     { path:'/',                   redirect:'/dashboard' },
+    { path:'/queue',              redirect:'/followups' },
     { path:'/dashboard',          component:Dashboard },
-    { path:'/appointments',        component:Appointments },
-    { path:'/appointments/new',    component:NewAppointment },
+    { path:'/appointments/new',   component:NewAppointment },
     { path:'/queue',              component:WorkQueue },
     { path:'/patients',           component:PatientSearch },
     { path:'/patients/new',       component:NewPatient },
@@ -3073,7 +3042,6 @@ const App = {
       if (p.startsWith('/analytics'))      return 'analytics';
       if (p.startsWith('/config'))         return 'config';
       if (p.startsWith('/dashboard'))      return 'dashboard';
-      if (p.startsWith('/appointments'))  return 'appointments';
       return 'dashboard';
     },
     userInitials() {
@@ -3113,8 +3081,7 @@ const App = {
           <div class="sidebar-logo"><span class="sidebar-name">Aangan Clinic</span><span class="sidebar-sub">Women\u2019s health centre</span></div>
           <nav class="sidebar-nav">
             <button class="nav-btn" :class="{on:section==='dashboard'}"      @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Dashboard</button>
-            <button class="nav-btn" :class="{on:section==='appointments'}"   @click="$router.push('/appointments')"><i class="ti ti-calendar"></i> Appointments</button>
-            <button class="nav-btn" :class="{on:section==='queue'}"          @click="$router.push('/queue')"><i class="ti ti-layout-list"></i> Work queue</button>
+            <button class="nav-btn" :class="{on:section==='followups'}"      @click="$router.push('/followups')"><i class="ti ti-calendar-check"></i> Follow-ups</button>
             <button class="nav-btn" :class="{on:section==='patients'}"       @click="$router.push('/patients')"><i class="ti ti-users"></i> Patients</button>
             <button class="nav-btn" :class="{on:section==='followups'}"      @click="$router.push('/followups')"><i class="ti ti-calendar-check"></i> Follow-ups</button>
             <button class="nav-btn" :class="{on:section==='billing'}"        @click="$router.push('/billing')"><i class="ti ti-receipt"></i> Billing</button>
