@@ -321,7 +321,7 @@ const ChildRegistration = {
 
 const PatientProfile = {
   name: 'PatientProfile',
-  data() { return { patient:null, loading:true, loadError:null, children:[], mother:null, followups:[], showAllFollowups:false }; },
+  data() { return { patient:null, loading:true, loadError:null, children:[], mother:null, followups:[], encounters:[], showAllFollowups:false }; },
   computed: {
     isChild()     { return this.patient&&this.patient.type==='child'; },
     initials()    { return this.patient?patientInitials(this.patient.name):'?'; },
@@ -377,7 +377,8 @@ const PatientProfile = {
       return yrs+' yrs';
     },
     ci(n)  { return patientInitials(n); },
-    ca(n)  { return patientAvatarClass(n); }
+    ca(n)  { return patientAvatarClass(n); },
+    fmtEncDate(d) { return fmtDateShort(d); }
   },
   mounted() { this.loadPatient(); },
   watch: { '$route.params.id'() { this.loadPatient(); } },
@@ -496,10 +497,29 @@ const PatientProfile = {
 
           <div class="section-header">
             <div class="section-title"><i class="ti ti-stethoscope" style="color:var(--teal-mid)"></i> Recent encounters</div>
-            <button class="btn btn-secondary btn-sm" @click="$router.push('/encounters/new')"><i class="ti ti-plus"></i> New</button>
+            <button class="btn btn-primary btn-sm" @click="$router.push('/encounters/new?patientId='+patient.id)"><i class="ti ti-plus"></i> New</button>
           </div>
           <div class="section-card">
-            <div class="empty-section" style="padding:22px"><i class="ti ti-notes"></i><p>No encounters recorded yet</p><p style="font-size:11px;color:#ccc;margin-top:2px">Coming in Step 9</p></div>
+            <template v-if="encounters.length>0">
+              <div class="encounter-row" v-for="e in encounters.slice(0,5)" :key="e.id">
+                <div class="encounter-icon"><i class="ti ti-stethoscope"></i></div>
+                <div class="encounter-info">
+                  <div class="encounter-doctor">{{ e.doctorName }} &middot; {{ fmtEncDate(e.date) }}</div>
+                  <div class="encounter-diagnosis" v-if="e.diagnosis">{{ e.diagnosis }}</div>
+                  <div class="encounter-meta" v-if="e.notes">{{ e.notes }}</div>
+                  <div class="encounter-meta" v-if="e.completedFollowupIds&&e.completedFollowupIds.length">
+                    <i class="ti ti-check" style="color:var(--teal-mid)"></i>
+                    {{ e.completedFollowupIds.length }} follow-up{{ e.completedFollowupIds.length===1?'':'s' }} closed
+                  </div>
+                </div>
+              </div>
+              <div class="row-more" v-if="encounters.length>5" style="font-size:12px;color:var(--text-muted)">
+                + {{ encounters.length-5 }} more encounters
+              </div>
+            </template>
+            <div class="empty-section" style="padding:22px" v-else>
+              <i class="ti ti-notes"></i><p>No encounters recorded yet</p>
+            </div>
           </div>
         </template>
       </div>
@@ -782,16 +802,20 @@ const FollowupCreation = {
 };
 
 // ================================================================
-//  STEP 6: FOLLOW-UP DETAIL  (with reminder engine)
+//  STEPS 8 & 9: FOLLOW-UP DETAIL  (reminders + contact log)
 // ================================================================
 
 const FollowupDetail = {
   name: 'FollowupDetail',
   data() {
     return {
-      fc: null, loading: true, loadError: null, updating: false,
+      fc: null, loading: true, loadError: null,
+      updating: false, patient: null,
       reminders: [], loadingReminders: false,
-      patient: null
+      contactLogs: [], loadingLogs: false,
+      showLogForm: false,
+      logForm: { outcome: '', notes: '' },
+      savingLog: false
     };
   },
   computed: {
@@ -803,12 +827,12 @@ const FollowupDetail = {
       const m = { anc:'detail-type-anc', vaccination:'detail-type-vaccination', post_procedure:'detail-type-post', annual_recall:'detail-type-recall' };
       return this.fc ? 'detail-type-icon ' + (m[this.fc.followupType] || 'detail-type-anc') : 'detail-type-icon';
     },
-    badge()   { return this.fc ? fcBadge(this.fc) : { text:'', cls:'' }; },
-    fmtDue()  { return this.fc ? fmtDateShort(this.fc.dueDate) : '\u2014'; },
-    today()   { return todayIso(); },
-    pendingReminders()   { return this.reminders.filter(r => r.status === 'pending'); },
+    badge()              { return this.fc ? fcBadge(this.fc) : { text:'', cls:'' }; },
+    fmtDue()             { return this.fc ? fmtDateShort(this.fc.dueDate) : '\u2014'; },
+    today()              { return todayIso(); },
     actionableReminders(){ return this.reminders.filter(r => r.status === 'pending' && r.reminderDate <= this.today); },
-    hasReminders()       { return this.reminders.length > 0; }
+    hasReminders()       { return this.reminders.length > 0; },
+    outcomeOptions()     { return CONTACT_OUTCOMES; }
   },
   methods: {
     async load() {
@@ -817,7 +841,7 @@ const FollowupDetail = {
         this.fc = await getFollowupCase(this.$route.params.id);
         if (!this.fc) { this.loadError = 'Follow-up case not found.'; return; }
         this.patient = await getPatient(this.fc.patientDocId);
-        await this.loadReminders();
+        await Promise.all([ this.loadReminders(), this.loadContactLogs() ]);
       } catch(e) { this.loadError = 'Could not load follow-up.'; }
       finally { this.loading = false; }
     },
@@ -826,10 +850,23 @@ const FollowupDetail = {
       try { this.reminders = await getReminderTasksForCase(this.fc.id); }
       finally { this.loadingReminders = false; }
     },
+    async loadContactLogs() {
+      this.loadingLogs = true;
+      try { this.contactLogs = await getContactLogs(this.fc.id); }
+      finally { this.loadingLogs = false; }
+    },
     async markStatus(status) {
       this.updating = true;
-      try { await updateFollowupStatus(this.fc.id, status); this.fc.status = status; }
-      catch(e) { alert('Error updating status.'); }
+      try {
+        if (status === 'completed') {
+          await completeFollowupCase(this.fc.id);
+          this.fc.status = 'completed';
+          this.reminders = this.reminders.map(r => ({ ...r, status: 'skipped' }));
+        } else {
+          await updateFollowupStatus(this.fc.id, status);
+          this.fc.status = status;
+        }
+      } catch(e) { alert('Error updating status.'); }
       finally { this.updating = false; }
     },
     async markReminderSent(taskId) {
@@ -837,24 +874,44 @@ const FollowupDetail = {
         await updateReminderStatus(taskId, 'sent');
         const t = this.reminders.find(r => r.id === taskId);
         if (t) t.status = 'sent';
-      } catch(e) { alert('Error updating reminder.'); }
+      } catch(e) { alert('Error.'); }
     },
     async markReminderSkipped(taskId) {
       try {
         await updateReminderStatus(taskId, 'skipped');
         const t = this.reminders.find(r => r.id === taskId);
         if (t) t.status = 'skipped';
-      } catch(e) { alert('Error updating reminder.'); }
+      } catch(e) { alert('Error.'); }
     },
     async generateMissingReminders() {
       if (!this.fc || !this.patient) return;
-      try {
-        await generateRemindersForCase(this.fc, this.patient);
-        await this.loadReminders();
-      } catch(e) { alert('Error generating reminders.'); }
+      try { await generateRemindersForCase(this.fc, this.patient); await this.loadReminders(); }
+      catch(e) { alert('Error generating reminders.'); }
     },
-    waLink(reminder) { return buildReminderWaLink(reminder); },
-    fmtDate(d) { return fmtDateShort(d); },
+    async saveContactLog() {
+      if (!this.logForm.outcome) return;
+      this.savingLog = true;
+      try {
+        await logContactOutcome(
+          this.fc.id, this.fc.patientDocId, this.fc.patientName,
+          this.logForm.outcome, this.logForm.notes
+        );
+        this.logForm = { outcome: '', notes: '' };
+        this.showLogForm = false;
+        await this.loadContactLogs();
+      } catch(e) { alert('Error saving.'); }
+      finally { this.savingLog = false; }
+    },
+    waLink(r)           { return buildReminderWaLink(r); },
+    fmtDate(d)          { return fmtDateShort(d); },
+    outcomeLabel(v)     { const o = CONTACT_OUTCOMES.find(x => x.value === v); return o ? o.label : v; },
+    outcomePill(v)      { return OUTCOME_PILL[v] || 'pill-gray'; },
+    fmtTs(ts) {
+      if (!ts) return '\u2014';
+      const d = ts.toDate ? ts.toDate() : new Date((ts.seconds || 0) * 1000);
+      return d.toLocaleDateString('en-IN', { day:'numeric', month:'short' }) +
+        ' at ' + d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+    },
     reminderDotCls(r) {
       if (r.status === 'sent')    return 'r-dot r-dot-sent';
       if (r.status === 'skipped') return 'r-dot r-dot-skipped';
@@ -863,8 +920,7 @@ const FollowupDetail = {
       return 'r-dot r-dot-pending';
     },
     reminderLabel(r) {
-      if (r.daysBeforeDue === 1)  return '1 day before';
-      if (r.daysBeforeDue === 0)  return 'On due date';
+      if (r.daysBeforeDue === 1) return '1 day before';
       return r.daysBeforeDue + ' days before';
     }
   },
@@ -874,16 +930,24 @@ const FollowupDetail = {
       <div class="topbar">
         <div class="topbar-left">
           <div class="topbar-breadcrumb">
-            <button class="btn btn-secondary btn-sm" @click="fc?$router.push('/patients/'+fc.patientDocId):$router.go(-1)"><i class="ti ti-arrow-left"></i> {{ fc?fc.patientName:'Back' }}</button>
+            <button class="btn btn-secondary btn-sm" @click="fc?$router.push('/patients/'+fc.patientDocId):$router.go(-1)">
+              <i class="ti ti-arrow-left"></i> {{ fc?fc.patientName:'Back' }}
+            </button>
             <span class="sep">/</span><span class="current">Follow-up</span>
           </div>
         </div>
+        <div class="topbar-right" v-if="fc&&fc.status==='active'">
+          <button class="btn btn-secondary btn-sm" @click="$router.push('/encounters/new?patientId='+fc.patientDocId)">
+            <i class="ti ti-stethoscope"></i> Record visit
+          </button>
+        </div>
       </div>
+
       <div class="content">
         <div class="loading-wrap" v-if="loading"><i class="ti ti-loader spin"></i> Loading\u2026</div>
         <div class="empty-section" v-else-if="loadError"><i class="ti ti-alert-triangle"></i><p>{{ loadError }}</p></div>
-        <template v-else-if="fc">
 
+        <template v-else-if="fc">
           <div class="detail-card">
             <div class="detail-type-header">
               <div :class="typeCls"><i :class="typeIcon"></i></div>
@@ -911,19 +975,18 @@ const FollowupDetail = {
             <button class="btn btn-secondary" @click="markStatus('declined')" :disabled="updating">Mark declined</button>
           </div>
 
+          <!-- Reminder tasks -->
           <div class="section-header">
             <div class="section-title">
               <i class="ti ti-brand-whatsapp" style="color:var(--teal-mid)"></i> Reminder tasks
               <span class="pill pill-amber" v-if="actionableReminders.length" style="margin-left:6px;font-size:10px">{{ actionableReminders.length }} due</span>
             </div>
-            <button class="btn btn-secondary btn-sm" v-if="!hasReminders && !loadingReminders" @click="generateMissingReminders">
+            <button class="btn btn-secondary btn-sm" v-if="!hasReminders&&!loadingReminders" @click="generateMissingReminders">
               <i class="ti ti-refresh"></i> Generate
             </button>
           </div>
-
           <div class="section-card" style="margin-bottom:16px">
             <div class="loading-wrap" v-if="loadingReminders" style="padding:16px"><i class="ti ti-loader spin"></i></div>
-
             <template v-else-if="hasReminders">
               <div class="reminder-row" v-for="r in reminders" :key="r.id">
                 <div :class="reminderDotCls(r)"></div>
@@ -931,28 +994,69 @@ const FollowupDetail = {
                   <div class="reminder-date">{{ fmtDate(r.reminderDate) }}</div>
                   <div class="reminder-meta">{{ reminderLabel(r) }}</div>
                 </div>
-                <span class="pill pill-teal"  v-if="r.status==='sent'"   >Sent</span>
+                <span class="pill pill-teal"  v-if="r.status==='sent'">Sent</span>
                 <span class="pill pill-gray"  v-else-if="r.status==='skipped'">Skipped</span>
                 <span class="pill pill-gray"  v-else-if="r.reminderDate>today" style="opacity:.6">Upcoming</span>
                 <template v-else>
-                  <a  v-if="waLink(r)" :href="waLink(r)" target="_blank" class="action-btn action-btn-wa" @click="() => {}">
-                    <i class="ti ti-brand-whatsapp"></i> Send
-                  </a>
-                  <span v-else class="pill pill-gray" title="No WA consent or mobile">No WA</span>
-                  <button class="action-btn action-btn-call" @click="markReminderSent(r.id)">
-                    <i class="ti ti-check"></i> Mark sent
-                  </button>
-                  <button class="action-btn" style="border-color:var(--border-mid);color:var(--text-muted)" @click="markReminderSkipped(r.id)">
-                    Skip
-                  </button>
+                  <a v-if="waLink(r)" :href="waLink(r)" target="_blank" class="action-btn action-btn-wa"><i class="ti ti-brand-whatsapp"></i> Send</a>
+                  <span v-else class="pill pill-gray" style="font-size:10px">No WA</span>
+                  <button class="action-btn action-btn-call" @click="markReminderSent(r.id)"><i class="ti ti-check"></i> Sent</button>
+                  <button class="action-btn" style="border-color:var(--border-mid);color:var(--text-muted)" @click="markReminderSkipped(r.id)">Skip</button>
                 </template>
               </div>
             </template>
-
             <div class="empty-section" style="padding:20px" v-else>
-              <i class="ti ti-bell-off"></i>
-              <p>No reminder tasks</p>
-              <p style="font-size:11px;color:#ccc;margin-top:2px">This case was created before Step 6. Click Generate above.</p>
+              <i class="ti ti-bell-off"></i><p>No reminder tasks</p>
+              <p style="font-size:11px;color:#ccc;margin-top:2px">Click Generate above to create them.</p>
+            </div>
+          </div>
+
+          <!-- Contact history (Step 8) -->
+          <div class="section-header">
+            <div class="section-title">
+              <i class="ti ti-history" style="color:var(--teal-mid)"></i> Contact history
+              <span class="pill pill-gray" v-if="contactLogs.length" style="margin-left:6px;font-size:10px">{{ contactLogs.length }}</span>
+            </div>
+            <button class="btn btn-secondary btn-sm" v-if="!showLogForm" @click="showLogForm=true">
+              <i class="ti ti-plus"></i> Log contact
+            </button>
+          </div>
+
+          <div class="detail-card" v-if="showLogForm" style="margin-bottom:10px">
+            <div class="form-group">
+              <label class="form-label">Outcome <span class="form-required">*</span></label>
+              <select v-model="logForm.outcome" class="form-select">
+                <option value="">Select outcome</option>
+                <option v-for="o in outcomeOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Notes</label>
+              <textarea v-model="logForm.notes" class="form-input" rows="2" placeholder="Optional"></textarea>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <button class="btn btn-primary btn-sm" @click="saveContactLog" :disabled="!logForm.outcome||savingLog">
+                <i class="ti ti-loader spin" v-if="savingLog"></i><i class="ti ti-check" v-else></i>
+                {{ savingLog ? 'Saving\u2026' : 'Save' }}
+              </button>
+              <button class="btn btn-secondary btn-sm" @click="showLogForm=false;logForm={outcome:'',notes:''}">Cancel</button>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="loading-wrap" v-if="loadingLogs" style="padding:16px"><i class="ti ti-loader spin"></i></div>
+            <template v-else-if="contactLogs.length">
+              <div class="contact-log-row" v-for="log in contactLogs" :key="log.id">
+                <div class="contact-log-header">
+                  <span class="pill" :class="outcomePill(log.outcome)">{{ outcomeLabel(log.outcome) }}</span>
+                  <span class="contact-log-time">{{ fmtTs(log.contactedAt) }}</span>
+                </div>
+                <div class="contact-log-notes" v-if="log.notes">{{ log.notes }}</div>
+                <div class="contact-log-by" v-if="log.loggedBy">{{ log.loggedBy }}</div>
+              </div>
+            </template>
+            <div class="empty-section" style="padding:20px" v-else>
+              <i class="ti ti-history"></i><p>No contact attempts logged</p>
             </div>
           </div>
 
@@ -961,7 +1065,6 @@ const FollowupDetail = {
     </div>
   `
 };
-
 // ================================================================
 //  REMAINING SCREENS  (Steps 6–14: placeholders)
 // ================================================================
@@ -1197,11 +1300,142 @@ const FollowupList = {
 
 const Encounter = {
   name: 'Encounter',
+  data() {
+    return {
+      patient: null, loadingPatient: false,
+      activeFollowups: [], selectedFollowupIds: [],
+      form: { date: todayIso(), doctorName: '', notes: '', diagnosis: '' },
+      doctors: CLINIC_DOCTORS.slice(),
+      saving: false, errors: {}
+    };
+  },
+  methods: {
+    async loadPatient(id) {
+      this.loadingPatient = true;
+      try {
+        this.patient = await getPatient(id);
+        if (this.patient) {
+          const followups = await getPatientFollowups(this.patient.id);
+          this.activeFollowups = followups.filter(f => f.status === 'active');
+          if (this.patient.type === 'child') this.form.doctorName = 'Dr. Abhishek Bansal';
+        }
+      } finally { this.loadingPatient = false; }
+    },
+    toggleFollowup(id) {
+      this.selectedFollowupIds = this.selectedFollowupIds.includes(id)
+        ? this.selectedFollowupIds.filter(x => x !== id)
+        : [...this.selectedFollowupIds, id];
+    },
+    validate() {
+      this.errors = {};
+      if (!this.form.date)       this.errors.date   = 'Date is required';
+      if (!this.form.doctorName) this.errors.doctor = 'Please select a doctor';
+      return !Object.keys(this.errors).length;
+    },
+    async save() {
+      if (!this.validate()) return;
+      this.saving = true;
+      try {
+        await createEncounter({
+          patientDocId:         this.patient.id,
+          patientName:          this.patient.name,
+          patientId:            this.patient.patientId,
+          date:                 this.form.date,
+          doctorName:           this.form.doctorName,
+          notes:                this.form.notes,
+          diagnosis:            this.form.diagnosis,
+          completedFollowupIds: this.selectedFollowupIds
+        });
+        this.$router.push('/followups/new?patientId=' + this.patient.id);
+      } catch(e) { alert('Error saving encounter. Please try again.'); }
+      finally { this.saving = false; }
+    },
+    initials(name)  { return patientInitials(name); },
+    avCls(name)     { return patientAvatarClass(name); },
+    fmtDate(d)      { return fmtDateShort(d); },
+    fcBadge_(fc)    { return fcBadge(fc); }
+  },
+  mounted() {
+    if (this.$route.query.patientId) this.loadPatient(this.$route.query.patientId);
+  },
   template: `
     <div class="screen">
-      <div class="topbar"><div class="topbar-left"><div class="topbar-breadcrumb"><button class="btn btn-secondary btn-sm" @click="$router.go(-1)"><i class="ti ti-arrow-left"></i> Back</button><span class="sep">/</span><span class="current">New encounter</span></div></div></div>
-      <div class="content"><div class="placeholder-screen"><i class="ti ti-stethoscope"></i><h2>Encounter / visit</h2><p class="sub">Date, doctor, notes, diagnosis &mdash; closes follow-up and creates the next</p><p class="step">Step 9 of the build plan</p></div></div>
-    </div>`
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="topbar-breadcrumb">
+            <button class="btn btn-secondary btn-sm" @click="patient?$router.push('/patients/'+patient.id):$router.go(-1)">
+              <i class="ti ti-arrow-left"></i> {{ patient?patient.name:'Back' }}
+            </button>
+            <span class="sep">/</span><span class="current">New encounter</span>
+          </div>
+        </div>
+      </div>
+      <div class="content">
+        <div class="loading-wrap" v-if="loadingPatient"><i class="ti ti-loader spin"></i> Loading\u2026</div>
+        <div class="form-card" style="max-width:640px" v-else>
+          <div class="form-card-title">Record visit</div>
+
+          <div class="patient-banner" v-if="patient">
+            <div class="avatar avatar-md" :class="patient.type==='child'?'avatar-blue':avCls(patient.name)">{{ initials(patient.name) }}</div>
+            <div>
+              <div class="patient-banner-name">{{ patient.name }}</div>
+              <div class="patient-banner-id">{{ patient.patientId }}<template v-if="patient.type==='child'"> &middot; Child</template></div>
+            </div>
+          </div>
+
+          <p class="form-section-title">Visit details</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Date <span class="form-required">*</span></label>
+              <input type="date" v-model="form.date" class="form-input" :class="{'input-error':errors.date}" />
+              <p class="form-error" v-if="errors.date">{{ errors.date }}</p>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Doctor <span class="form-required">*</span></label>
+              <select v-model="form.doctorName" class="form-select" :class="{'input-error':errors.doctor}">
+                <option value="">Select doctor</option>
+                <option v-for="d in doctors" :key="d" :value="d">{{ d }}</option>
+              </select>
+              <p class="form-error" v-if="errors.doctor">{{ errors.doctor }}</p>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Notes</label>
+            <textarea v-model="form.notes" class="form-input" rows="3" placeholder="Examination findings, treatment, prescriptions\u2026" style="resize:vertical"></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Diagnosis</label>
+            <input type="text" v-model="form.diagnosis" class="form-input" placeholder="Optional" />
+          </div>
+
+          <template v-if="activeFollowups.length > 0">
+            <p class="form-section-title">Mark follow-ups complete</p>
+            <p class="form-hint">Tick any follow-up cases addressed during this visit. Their pending reminders will be cancelled.</p>
+            <div class="followup-check-list">
+              <div class="followup-check-row" v-for="fc in activeFollowups" :key="fc.id" @click="toggleFollowup(fc.id)">
+                <div class="fc-check-box" :class="{checked: selectedFollowupIds.includes(fc.id)}">
+                  <i class="ti ti-check" v-if="selectedFollowupIds.includes(fc.id)"></i>
+                </div>
+                <div style="flex:1">
+                  <div class="fc-check-name">{{ fc.subType }}</div>
+                  <div class="fc-check-meta">Due {{ fmtDate(fc.dueDate) }}</div>
+                </div>
+                <span class="fc-badge" :class="fcBadge_(fc).cls" style="font-size:10px">{{ fcBadge_(fc).text }}</span>
+              </div>
+            </div>
+          </template>
+
+          <div class="form-actions">
+            <button class="btn btn-primary" @click="save" :disabled="saving||!patient">
+              <i class="ti ti-loader spin" v-if="saving"></i><i class="ti ti-check" v-else></i>
+              {{ saving ? 'Saving\u2026' : 'Save & create follow-up' }}
+            </button>
+            <button class="btn btn-secondary" @click="patient?$router.push('/patients/'+patient.id):$router.go(-1)" :disabled="saving">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `
 };
 
 const Billing = {
