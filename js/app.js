@@ -1896,6 +1896,10 @@ const FollowupList = {
       if (fc.status==='declined')  return 'Declined';
       if (fc.dueDate < todayIso()) return 'Overdue';
       return 'Active';
+    },
+    dueCls(fc) {
+      if (fc.status !== 'active') return '';
+      return fc.dueDate < todayIso() ? 'color:var(--red-mid)' : '';
     }
   },
   mounted() { this.load(); },
@@ -1939,7 +1943,7 @@ const FollowupList = {
                   <td><span class="pill" :class="typePill(fc.followupType)" style="font-size:10px">{{ typeTxt(fc.followupType) }}</span></td>
                   <td class="td-muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fc.subType||'\u2014' }}</td>
                   <td class="td-muted">{{ fc.doctorName||'\u2014' }}</td>
-                  <td :style="fc.status==='active'&&fc.dueDate<'2099'?'color:var(--'+(fc.dueDate<todayIso()?'red':'text')+'-mid)':''">{{ fmtDate(fc.dueDate) }}</td>
+                  <td :style="dueCls(fc)">{{ fmtDate(fc.dueDate) }}</td>
                   <td><span class="pill" :class="statusCls(fc)" style="font-size:10px">{{ statusTxt(fc) }}</span></td>
                   <td><i class="ti ti-chevron-right" style="color:var(--text-muted);font-size:13px"></i></td>
                 </tr>
