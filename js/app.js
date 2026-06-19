@@ -1466,6 +1466,368 @@ const Analytics = {
 
 
 // ================================================================
+//  APPOINTMENTS — DAY VIEW
+// ================================================================
+
+const Appointments = {
+  name: 'Appointments',
+  data() {
+    return {
+      date: todayIso(),
+      appts: [], loading: true, loadError: null,
+      savingId: null
+    };
+  },
+  computed: {
+    dateLabel() {
+      const [y,m,d] = this.date.split('-').map(Number);
+      return new Date(y,m-1,d).toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    },
+    isToday()  { return this.date === todayIso(); },
+    byDoctor() {
+      const seen = new Set();
+      const order = [];
+      this.appts.forEach(a => { if (!seen.has(a.doctorName)) { seen.add(a.doctorName); order.push(a.doctorName); } });
+      return order.map(doc => ({
+        doctor: doc,
+        appts:  this.appts.filter(a => a.doctorName === doc)
+      }));
+    },
+    stats() {
+      const a = this.appts;
+      return {
+        total:     a.length,
+        scheduled: a.filter(x => x.status==='scheduled').length,
+        seen:      a.filter(x => x.status==='seen').length,
+        noShow:    a.filter(x => x.status==='no_show').length,
+        cancelled: a.filter(x => x.status==='cancelled').length
+      };
+    }
+  },
+  methods: {
+    async load() {
+      this.loading=true; this.loadError=null;
+      try { this.appts = await getAppointmentsByDate(this.date); }
+      catch(e) { this.loadError='Could not load appointments.'; }
+      finally { this.loading=false; }
+    },
+    prevDay()  { this.date = addDays(this.date,-1); this.load(); },
+    nextDay()  { this.date = addDays(this.date, 1); this.load(); },
+    goToday()  { this.date = todayIso(); this.load(); },
+    async markSeen(appt) {
+      if (this.savingId) return;
+      this.savingId = appt.id;
+      try {
+        await updateAppointmentStatus(appt.id, 'seen');
+        appt.status = 'seen';
+        if (appt.patientId && confirm('Open encounter form for ' + appt.patientName + '?')) {
+          this.$router.push('/encounters/new?patientId=' + appt.patientId);
+        }
+      } finally { this.savingId = null; }
+    },
+    async markNoShow(appt) {
+      if (this.savingId) return;
+      this.savingId = appt.id;
+      try { await updateAppointmentStatus(appt.id,'no_show'); appt.status='no_show'; }
+      finally { this.savingId = null; }
+    },
+    async cancel(appt) {
+      if (!confirm('Cancel appointment for ' + appt.patientName + '?')) return;
+      this.savingId = appt.id;
+      try { await updateAppointmentStatus(appt.id,'cancelled'); appt.status='cancelled'; }
+      finally { this.savingId = null; }
+    },
+    waLink(appt) {
+      const [y,m,d] = this.date.split('-').map(Number);
+      const lbl = new Date(y,m-1,d).toLocaleDateString('en-IN',{day:'numeric',month:'long'});
+      return appointmentWaLink(appt, lbl);
+    },
+    typeLabel(t) { return (APPOINTMENT_TYPES.find(x=>x.value===t)||{}).label||t||'\u2014'; },
+    statusCls(s) { return {scheduled:'pill-teal',seen:'pill-green',no_show:'pill-amber',cancelled:'pill-gray'}[s]||'pill-gray'; },
+    statusTxt(s) { return {scheduled:'Scheduled',seen:'Seen',no_show:'No-show',cancelled:'Cancelled'}[s]||s; }
+  },
+  mounted() { this.load(); },
+  template: `
+    <div class="screen">
+      <div class="topbar">
+        <div class="topbar-left"><h1>Appointments</h1></div>
+        <div class="topbar-right">
+          <button class="btn btn-secondary btn-sm" @click="load" :disabled="loading"><i class="ti ti-refresh"></i> Refresh</button>
+          <button class="btn btn-primary" @click="$router.push('/appointments/new')"><i class="ti ti-calendar-plus"></i> Book appointment</button>
+        </div>
+      </div>
+      <div class="content">
+
+        <!-- Date navigator -->
+        <div class="appt-date-nav">
+          <button class="date-nav-btn" @click="prevDay"><i class="ti ti-chevron-left"></i></button>
+          <div class="appt-date-label">{{ dateLabel }}</div>
+          <button class="date-nav-btn" @click="nextDay"><i class="ti ti-chevron-right"></i></button>
+          <button class="appt-today-btn" v-if="!isToday" @click="goToday">Today</button>
+        </div>
+
+        <div class="loading-wrap" v-if="loading"><i class="ti ti-loader spin"></i> Loading\u2026</div>
+        <div class="empty-section" v-else-if="loadError"><i class="ti ti-alert-triangle"></i><p>{{ loadError }}</p></div>
+
+        <template v-else>
+          <!-- Stats row -->
+          <div class="appt-stat-row">
+            <div class="appt-stat"><div class="appt-stat-num">{{ stats.total }}</div><div class="appt-stat-lbl">Total</div></div>
+            <div class="appt-stat"><div class="appt-stat-num" style="color:var(--teal-mid)">{{ stats.scheduled }}</div><div class="appt-stat-lbl">Waiting</div></div>
+            <div class="appt-stat"><div class="appt-stat-num" style="color:#2e7d32">{{ stats.seen }}</div><div class="appt-stat-lbl">Seen</div></div>
+            <div class="appt-stat"><div class="appt-stat-num" style="color:var(--amber-mid)">{{ stats.noShow }}</div><div class="appt-stat-lbl">No-show</div></div>
+            <div class="appt-stat"><div class="appt-stat-num" style="color:var(--text-muted)">{{ stats.cancelled }}</div><div class="appt-stat-lbl">Cancelled</div></div>
+          </div>
+
+          <!-- Empty day -->
+          <div class="empty-section" v-if="appts.length===0">
+            <i class="ti ti-calendar" style="font-size:36px;opacity:.4"></i>
+            <p>No appointments booked for this day</p>
+            <button class="btn btn-primary" style="margin-top:12px" @click="$router.push('/appointments/new')"><i class="ti ti-calendar-plus"></i> Book first appointment</button>
+          </div>
+
+          <!-- Per-doctor groups -->
+          <template v-else>
+            <div v-for="group in byDoctor" :key="group.doctor" style="margin-bottom:18px">
+              <div class="section-header">
+                <div class="section-title"><i class="ti ti-stethoscope" style="color:var(--teal-mid)"></i> {{ group.doctor }}</div>
+                <div class="section-count">{{ group.appts.filter(a=>a.status==='scheduled').length }} waiting &middot; {{ group.appts.length }} total</div>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead><tr>
+                    <th style="width:32px">#</th>
+                    <th>Patient</th>
+                    <th>Mobile</th>
+                    <th>Type</th>
+                    <th>Notes</th>
+                    <th>Status</th>
+                    <th style="width:160px">Actions</th>
+                  </tr></thead>
+                  <tbody>
+                    <tr v-for="(appt, i) in group.appts" :key="appt.id"
+                        :style="appt.status==='cancelled'?'opacity:0.5':appt.status==='seen'?'opacity:0.75':''">
+                      <td class="td-muted" style="font-weight:600">{{ i+1 }}</td>
+                      <td>
+                        <span class="td-name">{{ appt.patientName }}</span>
+                        <span class="walkin-badge" v-if="appt.isWalkIn">Walk-in</span>
+                      </td>
+                      <td class="td-muted">{{ appt.mobile||'\u2014' }}</td>
+                      <td><span class="pill pill-teal" style="font-size:10px">{{ typeLabel(appt.type) }}</span></td>
+                      <td class="td-muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ appt.notes||'\u2014' }}</td>
+                      <td><span class="pill" :class="statusCls(appt.status)" style="font-size:10px">{{ statusTxt(appt.status) }}</span></td>
+                      <td>
+                        <template v-if="appt.status==='scheduled'">
+                          <div style="display:flex;gap:4px">
+                            <a v-if="waLink(appt)" :href="waLink(appt)" target="_blank" class="action-btn action-btn-wa" title="Send WA reminder"><i class="ti ti-brand-whatsapp"></i></a>
+                            <button class="action-btn" style="color:var(--teal-mid);border-color:var(--teal-border)" @click="markSeen(appt)" :disabled="savingId===appt.id" title="Mark seen"><i class="ti ti-check"></i> Seen</button>
+                            <button class="action-btn" style="color:var(--amber-mid);border-color:var(--amber-border)" @click="markNoShow(appt)" :disabled="savingId===appt.id" title="No-show"><i class="ti ti-user-x"></i></button>
+                            <button class="action-btn action-btn-flag" @click="cancel(appt)" :disabled="savingId===appt.id" title="Cancel"><i class="ti ti-x"></i></button>
+                          </div>
+                        </template>
+                        <template v-else-if="appt.status==='seen'&&appt.patientId">
+                          <button class="action-btn" style="font-size:11px" @click="$router.push('/encounters/new?patientId='+appt.patientId)"><i class="ti ti-stethoscope"></i> Encounter</button>
+                        </template>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </template>
+        </template>
+      </div>
+    </div>
+  `
+};
+
+// ================================================================
+//  NEW APPOINTMENT
+// ================================================================
+
+const NewAppointment = {
+  name: 'NewAppointment',
+  data() {
+    return {
+      isWalkIn: false,
+      patientQuery: '', patientResults: [], searchingPatients: false,
+      selectedPatient: null,
+      form: {
+        patientName: '',
+        mobile:      '',
+        date:        todayIso(),
+        doctorName:  CLINIC_DOCTORS[0] || '',
+        type:        'consultation',
+        notes:       ''
+      },
+      saving: false, errors: {}
+    };
+  },
+  computed: {
+    doctors()       { return CLINIC_DOCTORS; },
+    apptTypes()     { return APPOINTMENT_TYPES; }
+  },
+  methods: {
+    async doSearch() {
+      if (this.patientQuery.length < 2) { this.patientResults=[]; return; }
+      this.searchingPatients = true;
+      try {
+        const all = await getAllPatients();
+        const q = this.patientQuery.toLowerCase();
+        this.patientResults = all.filter(p =>
+          (p.name||'').toLowerCase().includes(q) ||
+          (p.mobile||'').includes(q) ||
+          (p.patientId||'').toLowerCase().includes(q)
+        ).slice(0, 8);
+      } finally { this.searchingPatients=false; }
+    },
+    selectPatient(p) {
+      this.selectedPatient = p;
+      this.form.patientName = p.name;
+      this.form.mobile      = p.mobile || '';
+      this.patientQuery     = p.name;
+      this.patientResults   = [];
+      if (p.type === 'child') this.form.doctorName = 'Dr. Abhishek Bansal';
+    },
+    clearPatient() {
+      this.selectedPatient=null; this.patientQuery='';
+      this.form.patientName=''; this.form.mobile='';
+    },
+    toggleWalkIn() {
+      this.isWalkIn = !this.isWalkIn;
+      this.clearPatient();
+    },
+    validate() {
+      this.errors={};
+      if (!this.form.patientName.trim()) this.errors.name='Patient name is required';
+      if (!this.form.date)               this.errors.date='Date is required';
+      if (!this.form.doctorName)         this.errors.doctor='Doctor is required';
+      return Object.keys(this.errors).length===0;
+    },
+    async save() {
+      if (!this.validate()) return;
+      this.saving=true;
+      try {
+        await createAppointment({
+          patientId:   this.selectedPatient ? this.selectedPatient.id : null,
+          patientName: this.form.patientName,
+          mobile:      this.form.mobile,
+          date:        this.form.date,
+          doctorName:  this.form.doctorName,
+          type:        this.form.type,
+          notes:       this.form.notes
+        });
+        this.$router.push('/appointments');
+      } catch(e) { alert('Error: '+e.message); }
+      finally { this.saving=false; }
+    },
+    initials(n) { return patientInitials(n); },
+    avCls(n)    { return patientAvatarClass(n); }
+  },
+  template: `
+    <div class="screen">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="topbar-breadcrumb">
+            <button class="btn btn-secondary btn-sm" @click="$router.push('/appointments')"><i class="ti ti-arrow-left"></i> Appointments</button>
+            <span class="sep">/</span><span class="current">Book appointment</span>
+          </div>
+        </div>
+      </div>
+      <div class="content">
+        <div class="form-card" style="max-width:680px">
+          <div class="form-card-title">Book appointment</div>
+
+          <!-- Patient selection -->
+          <p class="form-section-title">Patient</p>
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <button class="btn" :class="!isWalkIn?'btn-primary':'btn-secondary'" @click="isWalkIn=false"><i class="ti ti-search"></i> Existing patient</button>
+            <button class="btn" :class="isWalkIn?'btn-primary':'btn-secondary'"  @click="toggleWalkIn"><i class="ti ti-user-plus"></i> Walk-in</button>
+          </div>
+
+          <!-- Existing patient search -->
+          <template v-if="!isWalkIn">
+            <div class="patient-search-wrap" style="position:relative;margin-bottom:4px">
+              <div class="search-wrap">
+                <i class="ti ti-search"></i>
+                <input type="text" v-model="patientQuery" class="search-input" placeholder="Search by name, mobile, or patient ID\u2026" @input="doSearch" :disabled="!!selectedPatient" />
+                <button class="search-clear" v-if="selectedPatient" @click="clearPatient"><i class="ti ti-x"></i></button>
+              </div>
+              <div class="patient-dropdown" v-if="patientResults.length" style="position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:8px;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,.1);max-height:240px;overflow-y:auto">
+                <div class="patient-result" v-for="p in patientResults" :key="p.id" @click="selectPatient(p)" style="display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border)">
+                  <div class="avatar avatar-sm" :class="avCls(p.name)">{{ initials(p.name) }}</div>
+                  <div><div style="font-size:13px;font-weight:500">{{ p.name }}</div><div style="font-size:11px;color:var(--text-muted)">{{ p.patientId }} \u00b7 {{ p.mobile }}</div></div>
+                  <span class="pill pill-blue" v-if="p.type==='child'" style="margin-left:auto;font-size:10px">Child</span>
+                </div>
+              </div>
+            </div>
+            <div v-if="selectedPatient" class="detail-card" style="margin-bottom:10px;display:flex;align-items:center;gap:10px">
+              <div class="avatar avatar-sm" :class="avCls(selectedPatient.name)">{{ initials(selectedPatient.name) }}</div>
+              <div><div style="font-size:13px;font-weight:500">{{ selectedPatient.name }}</div><div style="font-size:11px;color:var(--text-muted)">{{ selectedPatient.patientId }} \u00b7 {{ selectedPatient.mobile }}</div></div>
+              <span class="pill pill-blue" v-if="selectedPatient.type==='child'" style="margin-left:auto;font-size:10px">Child \u2014 auto-assigned to Dr. Abhishek</span>
+            </div>
+            <p class="form-error" v-if="errors.name">{{ errors.name }}</p>
+          </template>
+
+          <!-- Walk-in fields -->
+          <template v-else>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Name <span class="form-required">*</span></label>
+                <input type="text" v-model="form.patientName" class="form-input" :class="{error:errors.name}" placeholder="Patient name" />
+                <p class="form-error" v-if="errors.name">{{ errors.name }}</p>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Mobile</label>
+                <input type="tel" v-model="form.mobile" class="form-input" placeholder="10-digit mobile" />
+              </div>
+            </div>
+          </template>
+
+          <!-- Appointment details -->
+          <p class="form-section-title">Appointment details</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Date <span class="form-required">*</span></label>
+              <input type="date" v-model="form.date" class="form-input" :class="{error:errors.date}" />
+              <p class="form-error" v-if="errors.date">{{ errors.date }}</p>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Doctor <span class="form-required">*</span></label>
+              <select v-model="form.doctorName" class="form-select" :class="{error:errors.doctor}">
+                <option v-for="d in doctors" :key="d" :value="d">{{ d }}</option>
+              </select>
+              <p class="form-error" v-if="errors.doctor">{{ errors.doctor }}</p>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Type</label>
+              <select v-model="form.type" class="form-select">
+                <option v-for="t in apptTypes" :key="t.value" :value="t.value">{{ t.label }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Notes</label>
+              <input type="text" v-model="form.notes" class="form-input" placeholder="Optional notes" />
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn btn-primary" @click="save" :disabled="saving">
+              <i class="ti ti-loader spin" v-if="saving"></i><i class="ti ti-calendar-check" v-else></i>
+              {{ saving ? 'Booking\u2026' : 'Book appointment' }}
+            </button>
+            <button class="btn btn-secondary" @click="$router.push('/appointments')">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `
+};
+
+
+// ================================================================
 //  DASHBOARD  (landing screen)
 // ================================================================
 
@@ -1474,8 +1836,8 @@ const Dashboard = {
   data() {
     return {
       stats: null, loading: true,
-      reminders: [], recentInvoices: [],
-      loadingQ: true, loadingInv: true
+      reminders: [], recentInvoices: [], todayAppts: [],
+      loadingQ: true, loadingInv: true, loadingAppts: true
     };
   },
   computed: {
@@ -1508,6 +1870,9 @@ const Dashboard = {
           .then(inv => { this.recentInvoices = inv; })
           .finally(() => { this.loadingInv = false; });
       } else { this.loadingInv = false; }
+      getTodayAppointments()
+        .then(a => { this.todayAppts = a; })
+        .finally(() => { this.loadingAppts = false; });
     },
     async markSent(r) {
       await updateReminderStatus(r.id, 'sent');
@@ -1534,10 +1899,15 @@ const Dashboard = {
         </div>
 
         <!-- Stat cards -->
-        <div class="dash-stats" v-if="stats || loading">
+        <div class="dash-stats" :style="role==='doctor'?'grid-template-columns:repeat(5,minmax(0,1fr))':'grid-template-columns:repeat(4,minmax(0,1fr))'" v-if="stats || loading || !loadingAppts">
           <div class="dash-stat teal">
+            <div class="dash-stat-label">Appointments today</div>
+            <div class="dash-stat-value">{{ loadingAppts ? '—' : todayAppts.filter(a=>a.status==='scheduled').length }}</div>
+            <div class="dash-stat-sub">{{ loadingAppts ? '' : todayAppts.length + ' booked total' }}</div>
+          </div>
+          <div class="dash-stat">
             <div class="dash-stat-label">Reminders today</div>
-            <div class="dash-stat-value">{{ loading ? '—' : stats.pendingToday }}</div>
+            <div class="dash-stat-value" style="font-size:22px">{{ loading ? '—' : stats.pendingToday }}</div>
             <div class="dash-stat-sub">Pending to send</div>
           </div>
           <div class="dash-stat amber">
@@ -1619,10 +1989,20 @@ const Dashboard = {
 
           <div class="dash-panel" v-else>
             <div class="dash-panel-header">
-              <span class="dash-panel-title"><i class="ti ti-calendar-check" style="color:var(--teal-mid)"></i> Upcoming follow-ups</span>
-              <button class="dash-panel-link" @click="$router.push('/followups')">View all \u2192</button>
+              <span class="dash-panel-title"><i class="ti ti-calendar" style="color:var(--teal-mid)"></i> Today’s appointments</span>
+              <button class="dash-panel-link" @click="$router.push('/appointments')">View all →</button>
             </div>
-            <div class="dash-panel-empty">Use the follow-ups screen to see upcoming cases.</div>
+            <div class="loading-wrap" style="padding:20px" v-if="loadingAppts"><i class="ti ti-loader spin"></i></div>
+            <div class="dash-panel-empty" v-else-if="todayAppts.length===0"><i class="ti ti-calendar" style="font-size:20px;opacity:.4"></i><br>No appointments today</div>
+            <template v-else>
+              <div class="dash-panel-row" v-for="a in todayAppts.slice(0,6)" :key="a.id">
+                <div style="flex:1;min-width:0">
+                  <div style="font-weight:500;font-size:13px">{{ a.patientName }}<span class="walkin-badge" v-if="a.isWalkIn">Walk-in</span></div>
+                  <div style="font-size:11px;color:var(--text-muted)">{{ a.doctorName }}</div>
+                </div>
+                <span class="pill" style="font-size:10px;flex-shrink:0" :class="({scheduled:'pill-teal',seen:'pill-green',no_show:'pill-amber',cancelled:'pill-gray'})[a.status]||'pill-gray'">{{ ({scheduled:'Scheduled',seen:'Seen',no_show:'No-show',cancelled:'Cancelled'})[a.status]||a.status }}</span>
+              </div>
+            </template>
           </div>
 
         </div>
@@ -2645,6 +3025,8 @@ const router = VueRouter.createRouter({
   routes: [
     { path:'/',                   redirect:'/dashboard' },
     { path:'/dashboard',          component:Dashboard },
+    { path:'/appointments',        component:Appointments },
+    { path:'/appointments/new',    component:NewAppointment },
     { path:'/queue',              component:WorkQueue },
     { path:'/patients',           component:PatientSearch },
     { path:'/patients/new',       component:NewPatient },
@@ -2691,6 +3073,7 @@ const App = {
       if (p.startsWith('/analytics'))      return 'analytics';
       if (p.startsWith('/config'))         return 'config';
       if (p.startsWith('/dashboard'))      return 'dashboard';
+      if (p.startsWith('/appointments'))  return 'appointments';
       return 'dashboard';
     },
     userInitials() {
@@ -2730,6 +3113,7 @@ const App = {
           <div class="sidebar-logo"><span class="sidebar-name">Aangan Clinic</span><span class="sidebar-sub">Women\u2019s health centre</span></div>
           <nav class="sidebar-nav">
             <button class="nav-btn" :class="{on:section==='dashboard'}"      @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Dashboard</button>
+            <button class="nav-btn" :class="{on:section==='appointments'}"   @click="$router.push('/appointments')"><i class="ti ti-calendar"></i> Appointments</button>
             <button class="nav-btn" :class="{on:section==='queue'}"          @click="$router.push('/queue')"><i class="ti ti-layout-list"></i> Work queue</button>
             <button class="nav-btn" :class="{on:section==='patients'}"       @click="$router.push('/patients')"><i class="ti ti-users"></i> Patients</button>
             <button class="nav-btn" :class="{on:section==='followups'}"      @click="$router.push('/followups')"><i class="ti ti-calendar-check"></i> Follow-ups</button>
