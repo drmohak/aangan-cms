@@ -1854,11 +1854,103 @@ const WorkQueue = {
 
 const FollowupList = {
   name: 'FollowupList',
+  data() {
+    return {
+      allCases: [], loading: true, loadError: null,
+      query: '', filterType: 'all', filterStatus: 'active'
+    };
+  },
+  computed: {
+    filtered() {
+      let cases = this.allCases;
+      if (this.filterStatus !== 'all') cases = cases.filter(fc => fc.status === this.filterStatus);
+      if (this.filterType   !== 'all') cases = cases.filter(fc => fc.followupType === this.filterType);
+      if (this.query.trim()) {
+        const q = this.query.toLowerCase();
+        cases = cases.filter(fc => (fc.patientName||'').toLowerCase().includes(q) || (fc.patientId||'').toLowerCase().includes(q));
+      }
+      return cases.sort((a,b) => (a.dueDate||'').localeCompare(b.dueDate||''));
+    },
+    overdueCnt() { const t = todayIso(); return this.allCases.filter(fc=>fc.status==='active'&&fc.dueDate<t).length; }
+  },
+  methods: {
+    async load() {
+      this.loading=true; this.loadError=null;
+      try {
+        const snap = await db.collection('followupCases').get();
+        this.allCases = snap.docs.map(d=>({id:d.id,...d.data()}));
+      } catch(e){ this.loadError='Could not load follow-ups.'; }
+      finally { this.loading=false; }
+    },
+    fmtDate(d)  { return fmtDateShort(d); },
+    typePill(t) { return {anc:'pill-teal',vaccination:'pill-blue',post_procedure:'pill-gray',annual_recall:'pill-gray'}[t]||'pill-gray'; },
+    typeTxt(t)  { return {anc:'ANC',vaccination:'Vaccine',post_procedure:'Post-op',annual_recall:'Recall'}[t]||'Follow-up'; },
+    statusCls(fc) {
+      if (fc.status==='completed') return 'pill-green';
+      if (fc.status==='declined')  return 'pill-gray';
+      if (fc.dueDate < todayIso()) return 'pill-red';
+      return 'pill-amber';
+    },
+    statusTxt(fc) {
+      if (fc.status==='completed') return 'Done';
+      if (fc.status==='declined')  return 'Declined';
+      if (fc.dueDate < todayIso()) return 'Overdue';
+      return 'Active';
+    }
+  },
+  mounted() { this.load(); },
   template: `
     <div class="screen">
-      <div class="topbar"><div class="topbar-left"><h1>Follow-ups</h1></div><div class="topbar-right"><button class="btn btn-primary" @click="$router.push('/followups/new')"><i class="ti ti-plus"></i> New follow-up</button></div></div>
-      <div class="content"><div class="placeholder-screen"><i class="ti ti-calendar-check"></i><h2>All follow-up cases</h2><p class="sub">Global view across all patients &mdash; coming in Step 8</p><p class="step">Step 8 of the build plan</p></div></div>
-    </div>`
+      <div class="topbar">
+        <div class="topbar-left"><h1>Follow-ups</h1></div>
+        <div class="topbar-right">
+          <button class="btn btn-primary" @click="$router.push('/followups/new')"><i class="ti ti-plus"></i> New follow-up</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="search-wrap" style="margin-bottom:10px">
+          <i class="ti ti-search"></i>
+          <input type="text" v-model="query" class="search-input" placeholder="Search by patient name or ID\u2026" />
+          <button class="search-clear" v-if="query" @click="query=''"><i class="ti ti-x"></i></button>
+        </div>
+        <div class="filter-bar" style="margin-bottom:12px">
+          <button class="filter-btn" :class="{on:filterStatus==='all'}"       @click="filterStatus='all'">All statuses</button>
+          <button class="filter-btn" :class="{on:filterStatus==='active'}"    @click="filterStatus='active'">Active</button>
+          <button class="filter-btn" :class="{on:filterStatus==='completed'}" @click="filterStatus='completed'">Completed</button>
+          <span style="width:1px;background:var(--border);margin:0 6px;align-self:stretch"></span>
+          <button class="filter-btn" :class="{on:filterType==='all'}"              @click="filterType='all'">All types</button>
+          <button class="filter-btn" :class="{on:filterType==='anc'}"              @click="filterType='anc'">ANC</button>
+          <button class="filter-btn" :class="{on:filterType==='vaccination'}"      @click="filterType='vaccination'">Vaccine</button>
+          <button class="filter-btn" :class="{on:filterType==='post_procedure'}"   @click="filterType='post_procedure'">Post-op</button>
+          <button class="filter-btn" :class="{on:filterType==='annual_recall'}"    @click="filterType='annual_recall'">Recall</button>
+        </div>
+        <div class="loading-wrap" v-if="loading"><i class="ti ti-loader spin"></i> Loading\u2026</div>
+        <div class="empty-section" v-else-if="loadError"><i class="ti ti-alert-triangle"></i><p>{{ loadError }}</p></div>
+        <template v-else>
+          <p class="results-meta">{{ filtered.length }} case{{ filtered.length===1?'':'s' }}<span v-if="overdueCnt" style="color:var(--red-mid);margin-left:8px">\u00b7 {{ overdueCnt }} overdue</span></p>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead><tr>
+                <th>Patient</th><th>Type</th><th>Detail</th><th>Doctor</th><th>Due date</th><th>Status</th><th style="width:40px"></th>
+              </tr></thead>
+              <tbody>
+                <tr class="trow" v-for="fc in filtered" :key="fc.id" @click="$router.push('/followups/'+fc.id)">
+                  <td class="td-name">{{ fc.patientName }}<div class="td-muted" style="font-size:11px">{{ fc.patientId }}</div></td>
+                  <td><span class="pill" :class="typePill(fc.followupType)" style="font-size:10px">{{ typeTxt(fc.followupType) }}</span></td>
+                  <td class="td-muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ fc.subType||'\u2014' }}</td>
+                  <td class="td-muted">{{ fc.doctorName||'\u2014' }}</td>
+                  <td :style="fc.status==='active'&&fc.dueDate<'2099'?'color:var(--'+(fc.dueDate<todayIso()?'red':'text')+'-mid)':''">{{ fmtDate(fc.dueDate) }}</td>
+                  <td><span class="pill" :class="statusCls(fc)" style="font-size:10px">{{ statusTxt(fc) }}</span></td>
+                  <td><i class="ti ti-chevron-right" style="color:var(--text-muted);font-size:13px"></i></td>
+                </tr>
+                <tr v-if="filtered.length===0"><td colspan="7" style="text-align:center;padding:32px;color:var(--text-muted)">No follow-up cases match your filters</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+      </div>
+    </div>
+  `
 };
 
 const Encounter = {
