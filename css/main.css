@@ -1139,3 +1139,183 @@ button { font-family: inherit; cursor: pointer; }
 
 /* Form hint text */
 .form-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; margin-top: -8px; }
+
+/* -----------------------------------------------
+   STEPS 10 & 11: BILLING + RECONCILIATION STYLES
+----------------------------------------------- */
+
+/* Invoice list rows */
+.invoice-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.invoice-row:last-child { border-bottom: none; }
+.invoice-row:hover      { background: #fafafa; }
+.invoice-no-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--teal-dark);
+  background: var(--teal-light);
+  padding: 3px 8px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.invoice-info   { flex: 1; min-width: 0; }
+.invoice-patient{ font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.invoice-meta   { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.invoice-amount {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--teal-mid);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Services list in new invoice form */
+.service-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.service-amt-input { width: 130px; flex-shrink: 0; }
+.service-remove-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.service-remove-btn:hover { color: var(--red-mid); }
+.invoice-total-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--teal-light);
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin: 10px 0 4px;
+}
+.invoice-total-label { font-size: 13px; color: var(--teal-dark); font-weight: 500; }
+.invoice-total-value { font-size: 18px; font-weight: 700; color: var(--teal-dark); }
+
+/* Invoice detail view */
+.invoice-detail-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.invoice-detail-header {
+  background: var(--teal-light);
+  padding: 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.invoice-detail-no   { font-size: 20px; font-weight: 700; color: var(--teal-dark); }
+.invoice-detail-date { font-size: 12px; color: var(--teal-mid); margin-top: 3px; }
+.invoice-service-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.invoice-service-row:last-child { border-bottom: none; }
+.invoice-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--teal-light);
+  font-weight: 600;
+}
+.invoice-total-row .amount { font-size: 18px; color: var(--teal-dark); }
+
+/* Reconciliation table */
+.recon-table {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.recon-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 1fr 80px;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.recon-row:last-child { border-bottom: none; }
+.recon-row.header {
+  background: var(--bg);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.recon-row.total-row {
+  background: var(--bg);
+  font-weight: 600;
+  border-top: 2px solid var(--border);
+}
+.recon-mode  { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.recon-sys   { font-size: 13px; color: var(--text-secondary); }
+.recon-input { width: 100%; padding: 6px 10px; border: 1px solid var(--border-mid); border-radius: 6px; font-size: 13px; font-family: inherit; }
+.recon-input:focus { outline: none; border-color: var(--teal-border); }
+.diff-green { font-size: 12px; font-weight: 600; color: var(--green-mid); }
+.diff-red   { font-size: 12px; font-weight: 600; color: var(--red-mid); }
+.diff-amber { font-size: 12px; font-weight: 600; color: var(--amber-mid); }
+
+/* Date navigator */
+.date-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.date-nav-btn {
+  background: var(--surface);
+  border: 1px solid var(--border-mid);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-family: inherit;
+}
+.date-nav-btn:hover { border-color: var(--teal-border); color: var(--teal-dark); }
+.date-nav-label {
+  flex: 1;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+.recon-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 14px;
+}
+.recon-status.done    { background: var(--teal-light);  color: var(--teal-dark); }
+.recon-status.pending { background: var(--amber-light); color: var(--amber-dark); }

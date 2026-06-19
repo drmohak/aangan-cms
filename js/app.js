@@ -1438,22 +1438,446 @@ const Encounter = {
   `
 };
 
-const Billing = {
-  name: 'Billing',
+// ================================================================
+//  STEP 10: BILLING SCREENS
+// ================================================================
+
+const BillingList = {
+  name: 'BillingList',
+  data() { return { invoices:[], loading:true, loadError:null }; },
+  methods: {
+    async load() {
+      this.loading=true; this.loadError=null;
+      try { this.invoices=await getRecentInvoices(30); }
+      catch(e){ this.loadError='Could not load invoices.'; }
+      finally { this.loading=false; }
+    },
+    fmtAmt(n)    { return fmtAmount(n); },
+    fmtDate(d)   { return fmtDateShort(d); },
+    typeLabel(t) { return INVOICE_TYPE_LABELS[t]||t||'\u2014'; },
+    modePill(m)  { return {cash:'pill-teal',upi:'pill-blue',card:'pill-gray',bank_transfer:'pill-amber'}[m]||'pill-gray'; },
+    modeLabel(m) { return PAYMENT_MODE_LABELS[m]||m||'\u2014'; },
+    printInv(inv){ printInvoice(inv); }
+  },
+  mounted() { this.load(); },
   template: `
     <div class="screen">
-      <div class="topbar"><div class="topbar-left"><h1>Billing</h1></div><div class="topbar-right"><button class="btn btn-primary"><i class="ti ti-plus"></i> New invoice</button></div></div>
-      <div class="content"><div class="placeholder-screen"><i class="ti ti-receipt"></i><h2>Billing &amp; invoices</h2><p class="sub">Invoices, payments, print and PDF export</p><p class="step">Step 10 of the build plan</p></div></div>
-    </div>`
+      <div class="topbar">
+        <div class="topbar-left"><h1>Billing</h1></div>
+        <div class="topbar-right">
+          <button class="btn btn-primary" @click="$router.push('/billing/new')"><i class="ti ti-plus"></i> New invoice</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="loading-wrap" v-if="loading"><i class="ti ti-loader spin"></i> Loading\u2026</div>
+        <div class="empty-section" v-else-if="loadError"><i class="ti ti-alert-triangle"></i><p>{{ loadError }}</p></div>
+        <div class="empty-section" v-else-if="invoices.length===0">
+          <i class="ti ti-receipt"></i><p>No invoices yet</p>
+          <button class="btn btn-primary" style="margin-top:14px" @click="$router.push('/billing/new')"><i class="ti ti-plus"></i> Create first invoice</button>
+        </div>
+        <template v-else>
+          <p class="results-meta">{{ invoices.length }} invoices</p>
+          <div class="section-card">
+            <div class="invoice-row" v-for="inv in invoices" :key="inv.id" @click="$router.push('/billing/'+inv.id)">
+              <div class="invoice-no-badge">{{ inv.invoiceNumber }}</div>
+              <div class="invoice-info">
+                <div class="invoice-patient">{{ inv.patientName }}</div>
+                <div class="invoice-meta">{{ fmtDate(inv.date) }} &middot; {{ typeLabel(inv.invoiceType) }}</div>
+              </div>
+              <span class="pill" :class="modePill(inv.paymentMode)">{{ modeLabel(inv.paymentMode) }}</span>
+              <div class="invoice-amount">{{ fmtAmt(inv.totalAmount) }}</div>
+              <button class="action-btn action-btn-wa" @click.stop="printInv(inv)" title="Print">
+                <i class="ti ti-printer"></i>
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+  `
 };
+
+// ----------------------------------------------------------------
+
+const NewInvoice = {
+  name: 'NewInvoice',
+  data() {
+    return {
+      patient: null, loadingPatient: false,
+      patientQuery: '', patientResults: [], searchingPatients: false,
+      form: {
+        date: todayIso(),
+        invoiceType: 'consultation',
+        paymentMode: 'cash',
+        notes: '',
+        services: [{ description:'', amount:'' }]
+      },
+      saving: false, errors: {}
+    };
+  },
+  computed: {
+    totalAmount() {
+      return this.form.services.reduce((s,x) => s+(parseFloat(x.amount)||0), 0);
+    }
+  },
+  methods: {
+    async loadPatient(id) {
+      this.loadingPatient=true;
+      try { this.patient=await getPatient(id); }
+      finally { this.loadingPatient=false; }
+    },
+    async searchPatients() {
+      if (!this.patientQuery.trim()) { this.patientResults=[]; return; }
+      this.searchingPatients=true;
+      try {
+        const all=await getAllPatients();
+        const q=this.patientQuery.toLowerCase();
+        this.patientResults=all.filter(p=>(p.name||'').toLowerCase().includes(q)||(p.mobile||'').includes(q)).slice(0,5);
+      } finally { this.searchingPatients=false; }
+    },
+    selectPatient(p) { this.patient=p; this.patientQuery=''; this.patientResults=[]; },
+    addService() { this.form.services.push({ description:'', amount:'' }); },
+    removeService(i) { if(this.form.services.length>1) this.form.services.splice(i,1); },
+    validate() {
+      this.errors={};
+      if (!this.patient) this.errors.patient='Please select a patient';
+      if (!this.form.date) this.errors.date='Date is required';
+      const valid=this.form.services.filter(s=>s.description.trim()&&parseFloat(s.amount)>0);
+      if (!valid.length) this.errors.services='At least one service with amount is required';
+      return !Object.keys(this.errors).length;
+    },
+    async saveInvoice(andPrint) {
+      if (!this.validate()) return;
+      this.saving=true;
+      try {
+        const services=this.form.services
+          .filter(s=>s.description.trim()&&parseFloat(s.amount)>0)
+          .map(s=>({ description:s.description.trim(), amount:parseFloat(s.amount) }));
+        const invoice=await createInvoice({
+          patientDocId: this.patient.id,
+          patientName:  this.patient.name,
+          patientId:    this.patient.patientId,
+          date:         this.form.date,
+          invoiceType:  this.form.invoiceType,
+          services,
+          totalAmount:  this.totalAmount,
+          paymentMode:  this.form.paymentMode,
+          notes:        this.form.notes
+        });
+        if (andPrint) printInvoice(invoice);
+        this.$router.push('/billing');
+      } catch(e){ alert('Error saving invoice.'); }
+      finally { this.saving=false; }
+    },
+    fmtAmt(n)     { return fmtAmount(n); },
+    initials(n)   { return patientInitials(n); },
+    avCls(n)      { return patientAvatarClass(n); }
+  },
+  mounted() {
+    if (this.$route.query.patientId) this.loadPatient(this.$route.query.patientId);
+  },
+  template: `
+    <div class="screen">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="topbar-breadcrumb">
+            <button class="btn btn-secondary btn-sm" @click="$router.push('/billing')"><i class="ti ti-arrow-left"></i> Billing</button>
+            <span class="sep">/</span><span class="current">New invoice</span>
+          </div>
+        </div>
+      </div>
+      <div class="content">
+        <div class="loading-wrap" v-if="loadingPatient"><i class="ti ti-loader spin"></i></div>
+        <div class="form-card" style="max-width:640px" v-else>
+          <div class="form-card-title">New invoice</div>
+
+          <p class="form-section-title">Patient</p>
+          <div class="patient-banner" v-if="patient">
+            <div class="avatar avatar-md" :class="avCls(patient.name)">{{ initials(patient.name) }}</div>
+            <div><div class="patient-banner-name">{{ patient.name }}</div><div class="patient-banner-id">{{ patient.patientId }}</div></div>
+            <button class="btn btn-secondary btn-sm" style="margin-left:auto" @click="patient=null">Change</button>
+          </div>
+          <div v-else>
+            <div class="search-wrap">
+              <i class="ti ti-search"></i>
+              <input type="text" v-model="patientQuery" class="search-input" placeholder="Search patient by name or mobile\u2026" @input="searchPatients" />
+            </div>
+            <div class="section-card" v-if="patientResults.length">
+              <div class="patient-search-result" v-for="p in patientResults" :key="p.id" @click="selectPatient(p)">
+                <div class="avatar avatar-sm" :class="avCls(p.name)">{{ initials(p.name) }}</div>
+                <div><div style="font-size:13px;font-weight:500">{{ p.name }}</div><div style="font-size:11px;color:var(--text-muted)">{{ p.patientId }} &middot; {{ p.mobile }}</div></div>
+              </div>
+            </div>
+            <p class="form-error" v-if="errors.patient">{{ errors.patient }}</p>
+          </div>
+
+          <p class="form-section-title" style="margin-top:16px">Invoice details</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Date <span class="form-required">*</span></label>
+              <input type="date" v-model="form.date" class="form-input" :class="{'input-error':errors.date}" />
+              <p class="form-error" v-if="errors.date">{{ errors.date }}</p>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Invoice type</label>
+              <select v-model="form.invoiceType" class="form-select">
+                <option value="consultation">Consultation</option>
+                <option value="vaccination">Vaccination</option>
+                <option value="procedure">Procedure</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+
+          <p class="form-section-title">Services</p>
+          <div class="service-row" v-for="(svc,i) in form.services" :key="i">
+            <input type="text" v-model="svc.description" class="form-input" placeholder="Service description" style="flex:1" />
+            <div style="position:relative;width:130px">
+              <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none">&#8377;</span>
+              <input type="number" v-model="svc.amount" class="form-input service-amt-input" placeholder="0" min="0" style="padding-left:24px" />
+            </div>
+            <button class="service-remove-btn" @click="removeService(i)" v-if="form.services.length>1"><i class="ti ti-x"></i></button>
+          </div>
+          <button class="btn btn-secondary btn-sm" @click="addService" style="margin-top:4px"><i class="ti ti-plus"></i> Add service</button>
+          <p class="form-error" v-if="errors.services" style="margin-top:8px">{{ errors.services }}</p>
+          <div class="invoice-total-bar" v-if="totalAmount>0">
+            <span class="invoice-total-label">Total</span>
+            <span class="invoice-total-value">{{ fmtAmt(totalAmount) }}</span>
+          </div>
+
+          <p class="form-section-title">Payment</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Mode <span class="form-required">*</span></label>
+              <select v-model="form.paymentMode" class="form-select">
+                <option value="cash">Cash</option>
+                <option value="upi">UPI</option>
+                <option value="card">Card / POS</option>
+                <option value="bank_transfer">Bank Transfer</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Notes</label>
+              <input type="text" v-model="form.notes" class="form-input" placeholder="Optional" />
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn btn-primary" @click="saveInvoice(true)" :disabled="saving||!patient">
+              <i class="ti ti-loader spin" v-if="saving"></i><i class="ti ti-printer" v-else></i>
+              {{ saving ? 'Saving\u2026' : 'Save & Print' }}
+            </button>
+            <button class="btn btn-secondary" @click="saveInvoice(false)" :disabled="saving||!patient">
+              <i class="ti ti-check"></i> Save only
+            </button>
+            <button class="btn btn-secondary" @click="$router.push('/billing')" :disabled="saving">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `
+};
+
+// ----------------------------------------------------------------
+
+const InvoiceDetail = {
+  name: 'InvoiceDetail',
+  data() { return { invoice:null, loading:true, loadError:null }; },
+  methods: {
+    async load() {
+      this.loading=true; this.loadError=null;
+      try { this.invoice=await getInvoice(this.$route.params.id); if(!this.invoice) this.loadError='Invoice not found.'; }
+      catch(e) { this.loadError='Could not load invoice.'; }
+      finally { this.loading=false; }
+    },
+    print()        { if(this.invoice) printInvoice(this.invoice); },
+    fmtAmt(n)      { return fmtAmount(n); },
+    fmtDate(d)     { return fmtDateShort(d); },
+    modeLabel(m)   { return PAYMENT_MODE_LABELS[m]||m||'\u2014'; },
+    typeLabel(t)   { return INVOICE_TYPE_LABELS[t]||t||'\u2014'; }
+  },
+  mounted() { this.load(); },
+  template: `
+    <div class="screen">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="topbar-breadcrumb">
+            <button class="btn btn-secondary btn-sm" @click="$router.push('/billing')"><i class="ti ti-arrow-left"></i> Billing</button>
+            <span class="sep">/</span>
+            <span class="current">{{ invoice ? invoice.invoiceNumber : 'Invoice' }}</span>
+          </div>
+        </div>
+        <div class="topbar-right" v-if="invoice">
+          <button class="btn btn-primary" @click="print"><i class="ti ti-printer"></i> Print</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="loading-wrap" v-if="loading"><i class="ti ti-loader spin"></i> Loading\u2026</div>
+        <div class="empty-section" v-else-if="loadError"><i class="ti ti-alert-triangle"></i><p>{{ loadError }}</p></div>
+        <template v-else-if="invoice">
+          <div class="invoice-detail-card">
+            <div class="invoice-detail-header">
+              <div>
+                <div class="invoice-detail-no">{{ invoice.invoiceNumber }}</div>
+                <div class="invoice-detail-date">{{ fmtDate(invoice.date) }}</div>
+              </div>
+              <span class="pill pill-teal">{{ modeLabel(invoice.paymentMode) }}</span>
+            </div>
+            <div class="info-grid" style="padding:14px 16px;border-bottom:1px solid var(--border)">
+              <div class="info-item"><div class="info-label">Patient</div><div class="info-value">{{ invoice.patientName }}</div></div>
+              <div class="info-item"><div class="info-label">Patient ID</div><div class="info-value">{{ invoice.patientId }}</div></div>
+              <div class="info-item"><div class="info-label">Type</div><div class="info-value">{{ typeLabel(invoice.invoiceType) }}</div></div>
+              <div class="info-item"><div class="info-label">Status</div><div class="info-value" style="text-transform:capitalize">{{ invoice.paymentStatus }}</div></div>
+            </div>
+            <div class="invoice-service-row" v-for="(s,i) in invoice.services" :key="i">
+              <span>{{ s.description }}</span>
+              <span style="font-weight:500">{{ fmtAmt(s.amount) }}</span>
+            </div>
+            <div class="invoice-total-row">
+              <span>Total Amount</span>
+              <span class="amount">{{ fmtAmt(invoice.totalAmount) }}</span>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--text-muted)" v-if="invoice.notes">Notes: {{ invoice.notes }}</div>
+        </template>
+      </div>
+    </div>
+  `
+};
+
+// ================================================================
+//  STEP 11: DAILY RECONCILIATION
+// ================================================================
 
 const Reconciliation = {
   name: 'Reconciliation',
+  data() {
+    return {
+      date: todayIso(),
+      systemTotals: { cash:0, upi:0, card:0, bank_transfer:0 },
+      actual: { cash:'', upi:'', card:'', bank_transfer:'' },
+      isReconciled: false, notes: '',
+      loading: true, saving: false,
+      modes: [
+        { key:'cash',          label:'Cash' },
+        { key:'upi',           label:'UPI' },
+        { key:'card',          label:'Card / POS' },
+        { key:'bank_transfer', label:'Bank Transfer' }
+      ]
+    };
+  },
+  computed: {
+    totalSystem()  { return Object.values(this.systemTotals).reduce((a,b)=>a+b, 0); },
+    totalActual()  { return Object.values(this.actual).reduce((s,v)=>s+(parseFloat(v)||0), 0); },
+    totalDiff()    { return this.totalSystem - this.totalActual; },
+    dateLabel()    { return fmtDateShort(this.date); },
+    isToday()      { return this.date === todayIso(); }
+  },
+  methods: {
+    async loadData() {
+      this.loading=true;
+      try {
+        const [totals, recon] = await Promise.all([
+          getDailySystemTotals(this.date),
+          getReconciliation(this.date)
+        ]);
+        this.systemTotals=totals;
+        if (recon) {
+          const a=recon.actual||{};
+          this.actual={ cash:a.cash||'', upi:a.upi||'', card:a.card||'', bank_transfer:a.bank_transfer||'' };
+          this.isReconciled=!!recon.isReconciled;
+          this.notes=recon.notes||'';
+        } else {
+          this.actual={ cash:'', upi:'', card:'', bank_transfer:'' };
+          this.isReconciled=false; this.notes='';
+        }
+      } finally { this.loading=false; }
+    },
+    prevDay()  { this.date=addDays(this.date,-1); this.loadData(); },
+    nextDay()  { this.date=addDays(this.date,1);  this.loadData(); },
+    goToday()  { this.date=todayIso(); this.loadData(); },
+    diff(mode) { return (this.systemTotals[mode]||0)-(parseFloat(this.actual[mode])||0); },
+    diffCls(d) { return d===0?'diff-green':d>0?'diff-red':'diff-amber'; },
+    diffText(d){ return d===0?'\u2714 Match':(d>0?'\u2212 '+fmtAmount(d):'+'+fmtAmount(Math.abs(d))); },
+    async save() {
+      this.saving=true;
+      try {
+        const a={};
+        Object.keys(this.actual).forEach(k=>a[k]=parseFloat(this.actual[k])||0);
+        await saveReconciliation(this.date,a,this.notes);
+        alert('Collections saved.');
+      } catch(e){ alert('Error saving.'); }
+      finally { this.saving=false; }
+    },
+    async reconcile() {
+      this.saving=true;
+      try {
+        const a={};
+        Object.keys(this.actual).forEach(k=>a[k]=parseFloat(this.actual[k])||0);
+        await markReconciled(this.date,a,this.notes);
+        this.isReconciled=true;
+      } catch(e){ alert('Error.'); }
+      finally { this.saving=false; }
+    },
+    fmtAmt(n) { return fmtAmount(n); }
+  },
+  mounted() { this.loadData(); },
   template: `
     <div class="screen">
       <div class="topbar"><div class="topbar-left"><h1>Daily reconciliation</h1></div></div>
-      <div class="content"><div class="placeholder-screen"><i class="ti ti-chart-bar"></i><h2>Daily reconciliation</h2><p class="sub">Cash, UPI, card, bank &mdash; verify and close the day</p><p class="step">Step 11 of the build plan</p></div></div>
-    </div>`
+      <div class="content">
+        <div class="date-nav">
+          <button class="date-nav-btn" @click="prevDay"><i class="ti ti-chevron-left"></i></button>
+          <div class="date-nav-label">{{ dateLabel }}</div>
+          <button class="date-nav-btn" @click="nextDay"><i class="ti ti-chevron-right"></i></button>
+          <button class="btn btn-secondary btn-sm" @click="goToday" v-if="!isToday">Today</button>
+        </div>
+
+        <div class="loading-wrap" v-if="loading"><i class="ti ti-loader spin"></i> Loading\u2026</div>
+
+        <template v-else>
+          <div :class="isReconciled?'recon-status done':'recon-status pending'">
+            <i :class="isReconciled?'ti ti-circle-check':'ti ti-clock'"></i>
+            {{ isReconciled ? 'Reconciled' : 'Not reconciled' }}
+          </div>
+
+          <div class="recon-table">
+            <div class="recon-row header">
+              <div>Mode</div><div>System total</div><div>Actual collected</div><div>Diff</div>
+            </div>
+            <div class="recon-row" v-for="m in modes" :key="m.key">
+              <div class="recon-mode">{{ m.label }}</div>
+              <div class="recon-sys">{{ fmtAmt(systemTotals[m.key]||0) }}</div>
+              <input type="number" v-model="actual[m.key]" class="recon-input" placeholder="0" :disabled="isReconciled" />
+              <div :class="diffCls(diff(m.key))">{{ diffText(diff(m.key)) }}</div>
+            </div>
+            <div class="recon-row total-row">
+              <div>Total</div>
+              <div>{{ fmtAmt(totalSystem) }}</div>
+              <div>{{ fmtAmt(totalActual) }}</div>
+              <div :class="diffCls(totalDiff)">{{ diffText(totalDiff) }}</div>
+            </div>
+          </div>
+
+          <div class="form-group" v-if="!isReconciled">
+            <label class="form-label">Notes</label>
+            <textarea v-model="notes" class="form-input" rows="2" placeholder="Optional notes for this day"></textarea>
+          </div>
+
+          <div class="form-actions" v-if="!isReconciled">
+            <button class="btn btn-primary" @click="reconcile" :disabled="saving">
+              <i class="ti ti-loader spin" v-if="saving"></i><i class="ti ti-circle-check" v-else></i>
+              {{ saving ? 'Saving\u2026' : 'Mark as reconciled' }}
+            </button>
+            <button class="btn btn-secondary" @click="save" :disabled="saving">Save collections</button>
+          </div>
+          <p style="font-size:12px;color:var(--text-muted);margin-top:8px" v-if="isReconciled">
+            This day has been marked as reconciled. Contact admin to make changes.
+          </p>
+        </template>
+      </div>
+    </div>
+  `
 };
 
 // ================================================================
@@ -1474,7 +1898,9 @@ const router = VueRouter.createRouter({
     { path:'/followups/new',      component:FollowupCreation },
     { path:'/followups/:id',      component:FollowupDetail },
     { path:'/encounters/new',     component:Encounter },
-    { path:'/billing',            component:Billing },
+    { path:'/billing',            component:BillingList },
+    { path:'/billing/new',        component:NewInvoice },
+    { path:'/billing/:id',        component:InvoiceDetail },
     { path:'/reconciliation',     component:Reconciliation },
   ]
 });
