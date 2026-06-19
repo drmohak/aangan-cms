@@ -157,10 +157,11 @@ function buildReminderWaLink(task) {
 // ----------------------------------------------------------------
 
 async function createAncFollowups(patient, lmp) {
-  const edd   = calcEdd(lmp);
-  const batch = db.batch();
+  const edd     = calcEdd(lmp);
+  const weeks_  = await getEffectiveAncSchedule();
+  const batch   = db.batch();
 
-  ANC_WEEKS.forEach(weeks => {
+  weeks_.forEach(weeks => {
     const dueDate = addWeeks(lmp, weeks);
     const caseRef = db.collection('followupCases').doc();
     const fc = {
@@ -184,9 +185,10 @@ async function createAncFollowups(patient, lmp) {
 }
 
 async function createVaccinationFollowups(patient, dob) {
-  const batch = db.batch();
+  const vaccines_ = await getEffectiveVaccineSchedule();
+  const batch     = db.batch();
 
-  IAP_VACCINES.forEach(v => {
+  vaccines_.forEach(v => {
     const dueDate = addDays(dob, v.offsetDays);
     const caseRef = db.collection('followupCases').doc();
     const fc = {
@@ -350,4 +352,25 @@ async function getUpcomingFollowups(days) {
     .map(doc => ({ id: doc.id, ...doc.data() }))
     .filter(fc => fc.dueDate >= today && fc.dueDate <= future)
     .sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || ''));
+}
+
+// ----------------------------------------------------------------
+//  DYNAMIC CONFIG READERS  (Step 12)
+//  Read editable schedules from Firestore; fall back to hardcoded.
+// ----------------------------------------------------------------
+
+async function getEffectiveAncSchedule() {
+  try {
+    const doc = await db.collection('meta').doc('ancSchedule').get();
+    if (doc.exists && Array.isArray(doc.data().weeks)) return doc.data().weeks;
+  } catch(e) { /* fall through */ }
+  return ANC_WEEKS;
+}
+
+async function getEffectiveVaccineSchedule() {
+  try {
+    const doc = await db.collection('meta').doc('vaccineSchedule').get();
+    if (doc.exists && Array.isArray(doc.data().vaccines)) return doc.data().vaccines;
+  } catch(e) { /* fall through */ }
+  return IAP_VACCINES;
 }

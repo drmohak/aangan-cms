@@ -1069,6 +1069,336 @@ const FollowupDetail = {
 //  REMAINING SCREENS  (Steps 6–14: placeholders)
 // ================================================================
 
+// ================================================================
+//  STEP 12: CONFIGURATION SCREEN
+// ================================================================
+
+const Config = {
+  name: 'Config',
+  data() {
+    return {
+      tab: 'services',
+      services: [], loadingServices: true, savingService: false,
+      showAddForm: false,
+      addForm: { name:'', defaultAmount:'', category:'consultation' },
+      editingId: null,
+      editForm: { name:'', defaultAmount:'', category:'consultation' },
+      clinicSettings: { ...DEFAULT_CLINIC_SETTINGS },
+      loadingSettings: false, savingSettings: false,
+      ancWeeks: [], loadingAnc: false, savingAnc: false, newWeek: '',
+      reminderSchedules: { anc:[14,7,1], vaccination:[30,7,1], post_procedure:[3,1], annual_recall:[30,7,1] },
+      loadingReminder: false, savingReminder: false
+    };
+  },
+  computed: {
+    serviceCategories() { return SERVICE_CATEGORIES; }
+  },
+  methods: {
+    async switchTab(t) {
+      this.tab = t;
+      if (t === 'services')  await this.loadServices();
+      if (t === 'clinic')    await this.loadClinicSettings();
+      if (t === 'anc')       await this.loadAncSchedule();
+      if (t === 'reminder')  await this.loadReminderSchedules();
+    },
+    async loadServices() {
+      this.loadingServices = true;
+      try { this.services = await getAllServices(); }
+      finally { this.loadingServices = false; }
+    },
+    async addService() {
+      if (!this.addForm.name.trim()) return;
+      this.savingService = true;
+      try { await createService(this.addForm); this.addForm={name:'',defaultAmount:'',category:'consultation'}; this.showAddForm=false; await this.loadServices(); }
+      catch(e){ alert('Error saving.'); } finally { this.savingService=false; }
+    },
+    startEdit(s) { this.editingId=s.id; this.editForm={name:s.name,defaultAmount:s.defaultAmount,category:s.category||'consultation'}; },
+    cancelEdit() { this.editingId=null; },
+    async saveEdit() {
+      this.savingService=true;
+      try { await updateService(this.editingId,this.editForm); this.editingId=null; await this.loadServices(); }
+      catch(e){ alert('Error.'); } finally { this.savingService=false; }
+    },
+    async toggleActive(s) { await toggleServiceActive(s.id,!s.isActive); await this.loadServices(); },
+    async removeService(id) { if(!confirm('Delete this service?')) return; await deleteService(id); await this.loadServices(); },
+    catLabel(c) { const x=SERVICE_CATEGORIES.find(s=>s.value===c); return x?x.label:c; },
+    fmtAmt(n) { return fmtAmount(n); },
+    async loadClinicSettings() { this.loadingSettings=true; try { this.clinicSettings=await getClinicSettings(); } finally { this.loadingSettings=false; } },
+    async saveSettings() { this.savingSettings=true; try { await saveClinicSettings(this.clinicSettings); alert('Saved.'); } finally { this.savingSettings=false; } },
+    async loadAncSchedule() { this.loadingAnc=true; try { this.ancWeeks=await getAncScheduleConfig(); } finally { this.loadingAnc=false; } },
+    addAncWeek() { const w=parseInt(this.newWeek); if(w>0&&!this.ancWeeks.includes(w)){ this.ancWeeks=[...this.ancWeeks,w].sort((a,b)=>a-b); this.newWeek=\'\'; } },
+    removeAncWeek(i) { this.ancWeeks=this.ancWeeks.filter((_,idx)=>idx!==i); },
+    async saveAncSchedule() {
+      this.savingAnc=true;
+      try { await saveAncScheduleConfig(this.ancWeeks.map(Number).filter(n=>n>0).sort((a,b)=>a-b)); alert(\'ANC schedule saved.\'); }
+      finally { this.savingAnc=false; }
+    },
+    async loadReminderSchedules() { this.loadingReminder=true; try { this.reminderSchedules=await getReminderSchedulesConfig(); } finally { this.loadingReminder=false; } },
+    async saveReminderSchedules() {
+      this.savingReminder=true;
+      try { await saveReminderSchedulesConfig(this.reminderSchedules); alert(\'Reminder schedules saved.\'); }
+      finally { this.savingReminder=false; }
+    },
+    reminderTypes() { return [
+      {key:\'anc\',label:\'ANC visits\'},{key:\'vaccination\',label:\'Vaccination\'},
+      {key:\'post_procedure\',label:\'Post-procedure\'},{key:\'annual_recall\',label:\'Annual recall\'}
+    ]; },
+    addReminderDay(type) {
+      const c = this.reminderSchedules[type] || [];
+      this.reminderSchedules = { ...this.reminderSchedules, [type]: [...c, 7] };
+    },
+    removeReminderDay(type, i) {
+      const c = [...(this.reminderSchedules[type]||[])]; c.splice(i,1);
+      this.reminderSchedules = { ...this.reminderSchedules, [type]: c };
+    }
+  },
+  mounted() { this.loadServices(); },
+  template: `
+    <div class="screen">
+      <div class="topbar"><div class="topbar-left"><h1>Settings</h1></div></div>
+      <div class="content">
+        <div class="config-tab-bar">
+          <button class="config-tab" :class="{on:tab===\'services\'}" @click="switchTab(\'services\')"><i class="ti ti-list-check"></i> Services</button>
+          <button class="config-tab" :class="{on:tab===\'clinic\'}"   @click="switchTab(\'clinic\')"><i class="ti ti-building"></i> Clinic</button>
+          <button class="config-tab" :class="{on:tab===\'anc\'}"      @click="switchTab(\'anc\')"><i class="ti ti-heart-rate-monitor"></i> ANC schedule</button>
+          <button class="config-tab" :class="{on:tab===\'reminder\'}" @click="switchTab(\'reminder\')"><i class="ti ti-bell"></i> Reminders</button>
+        </div>
+
+        <!-- SERVICES TAB -->
+        <template v-if="tab===\'services\'">
+          <div class="section-header">
+            <div class="section-title">Services master list</div>
+            <button class="btn btn-primary btn-sm" @click="showAddForm=!showAddForm"><i class="ti ti-plus"></i> Add service</button>
+          </div>
+          <div class="detail-card" v-if="showAddForm" style="margin-bottom:14px">
+            <p class="form-section-title" style="margin-top:0">New service</p>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">Name <span class="form-required">*</span></label><input type="text" v-model="addForm.name" class="form-input" placeholder="e.g. ANC Consultation" /></div>
+              <div class="form-group"><label class="form-label">Default amount (₹)</label><input type="number" v-model="addForm.defaultAmount" class="form-input" placeholder="500" min="0" /></div>
+            </div>
+            <div class="form-group"><label class="form-label">Category</label><select v-model="addForm.category" class="form-select"><option v-for="c in serviceCategories" :key="c.value" :value="c.value">{{ c.label }}</option></select></div>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <button class="btn btn-primary btn-sm" @click="addService" :disabled="savingService||!addForm.name.trim()"><i class="ti ti-check"></i> {{ savingService ? \'Saving…\' : \'Save service\' }}</button>
+              <button class="btn btn-secondary btn-sm" @click="showAddForm=false">Cancel</button>
+            </div>
+          </div>
+          <div class="loading-wrap" v-if="loadingServices"><i class="ti ti-loader spin"></i></div>
+          <div class="section-card" v-else-if="services.length">
+            <template v-for="s in services" :key="s.id">
+              <div class="service-item" :class="{inactive:!s.isActive}" v-if="editingId!==s.id">
+                <div style="flex:1"><div class="service-name">{{ s.name }}</div><div class="service-cat">{{ catLabel(s.category) }}</div></div>
+                <div class="service-amount">{{ fmtAmt(s.defaultAmount) }}</div>
+                <button :class="\'toggle-btn \'+(s.isActive?\'on\':\'off\')" @click="toggleActive(s)"></button>
+                <button class="action-btn" style="border-color:var(--border-mid)" @click="startEdit(s)"><i class="ti ti-edit"></i></button>
+                <button class="action-btn action-btn-flag" @click="removeService(s.id)"><i class="ti ti-trash"></i></button>
+              </div>
+              <div class="service-item" v-else style="flex-direction:column;align-items:stretch;gap:8px">
+                <div class="form-row" style="margin-bottom:0">
+                  <input type="text" v-model="editForm.name" class="form-input" placeholder="Service name" />
+                  <input type="number" v-model="editForm.defaultAmount" class="form-input" placeholder="Amount" style="width:120px;flex-shrink:0" />
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <select v-model="editForm.category" class="form-select" style="flex:1"><option v-for="c in serviceCategories" :key="c.value" :value="c.value">{{ c.label }}</option></select>
+                  <button class="btn btn-primary btn-sm" @click="saveEdit" :disabled="savingService"><i class="ti ti-check"></i> Save</button>
+                  <button class="btn btn-secondary btn-sm" @click="cancelEdit">Cancel</button>
+                </div>
+              </div>
+            </template>
+          </div>
+          <div class="empty-section" v-else><i class="ti ti-list-check"></i><p>No services yet. Add your first service above.</p></div>
+        </template>
+
+        <!-- CLINIC TAB -->
+        <template v-if="tab===\'clinic\'">
+          <div class="loading-wrap" v-if="loadingSettings"><i class="ti ti-loader spin"></i></div>
+          <div class="form-card" style="max-width:500px" v-else>
+            <div class="form-card-title">Clinic information</div>
+            <div class="form-group"><label class="form-label">Clinic name</label><input type="text" v-model="clinicSettings.name" class="form-input" /></div>
+            <div class="form-group"><label class="form-label">Subtitle</label><input type="text" v-model="clinicSettings.subtitle" class="form-input" /></div>
+            <div class="form-group"><label class="form-label">Address</label><textarea v-model="clinicSettings.address" class="form-input" rows="2" style="resize:vertical"></textarea></div>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">Phone</label><input type="tel" v-model="clinicSettings.phone" class="form-input" /></div>
+              <div class="form-group"><label class="form-label">Email</label><input type="email" v-model="clinicSettings.email" class="form-input" /></div>
+            </div>
+            <div class="form-actions"><button class="btn btn-primary" @click="saveSettings" :disabled="savingSettings"><i class="ti ti-check"></i> {{ savingSettings ? \'Saving…\' : \'Save clinic info\' }}</button></div>
+          </div>
+        </template>
+
+        <!-- ANC SCHEDULE TAB -->
+        <template v-if="tab===\'anc\'">
+          <div class="loading-wrap" v-if="loadingAnc"><i class="ti ti-loader spin"></i></div>
+          <div class="form-card" style="max-width:500px" v-else>
+            <div class="form-card-title">ANC visit schedule</div>
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Weeks from LMP at which ANC visits are scheduled. Changes apply to new follow-up creations.</p>
+            <div class="week-tag-list">
+              <div class="week-tag" v-for="(w,i) in ancWeeks" :key="i">Week {{ w }}<button class="week-tag-remove" @click="removeAncWeek(i)"><i class="ti ti-x"></i></button></div>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:16px">
+              <input type="number" v-model="newWeek" class="form-input" placeholder="Week number (e.g. 36)" style="width:200px" min="1" max="44" @keyup.enter="addAncWeek" />
+              <button class="btn btn-secondary" @click="addAncWeek"><i class="ti ti-plus"></i> Add</button>
+            </div>
+            <div class="form-actions"><button class="btn btn-primary" @click="saveAncSchedule" :disabled="savingAnc"><i class="ti ti-check"></i> {{ savingAnc ? \'Saving…\' : \'Save schedule\' }}</button></div>
+          </div>
+        </template>
+
+        <!-- REMINDER SCHEDULES TAB -->
+        <template v-if="tab===\'reminder\'">
+          <div class="loading-wrap" v-if="loadingReminder"><i class="ti ti-loader spin"></i></div>
+          <div class="form-card" style="max-width:560px" v-else>
+            <div class="form-card-title">Reminder schedules</div>
+            <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px">Days before due date on which reminders are generated. Changes apply to new follow-up creations.</p>
+            <div v-for="type in reminderTypes()" :key="type.key" style="margin-bottom:20px">
+              <p class="form-section-title" style="margin-top:0">{{ type.label }}</p>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+                <div v-for="(day,i) in (reminderSchedules[type.key]||[])" :key="i" class="week-tag">{{ day }} day{{ day===1?\'\':\'s\' }} before<button class="week-tag-remove" @click="removeReminderDay(type.key,i)"><i class="ti ti-x"></i></button></div>
+                <button class="btn btn-secondary btn-sm" @click="addReminderDay(type.key)"><i class="ti ti-plus"></i> Add interval</button>
+              </div>
+            </div>
+            <div class="form-actions"><button class="btn btn-primary" @click="saveReminderSchedules" :disabled="savingReminder"><i class="ti ti-check"></i> {{ savingReminder ? \'Saving…\' : \'Save schedules\' }}</button></div>
+          </div>
+        </template>
+      </div>
+    </div>
+  `
+};
+
+// ================================================================
+//  STEP 12: ANALYTICS / REPORTS SCREEN
+// ================================================================
+
+const Analytics = {
+  name: 'Analytics',
+  data() {
+    return {
+      period: 30,
+      summary: null, modeData: null, trendData: [], followupStats: null,
+      loading: true
+    };
+  },
+  computed: {
+    hasModeData() {
+      return this.modeData && Object.values(this.modeData).some(v => v > 0);
+    }
+  },
+  methods: {
+    async loadData() {
+      this.loading = true;
+      if (this._chartRevenue) { this._chartRevenue.destroy(); this._chartRevenue = null; }
+      if (this._chartMode)    { this._chartMode.destroy();    this._chartMode    = null; }
+      try {
+        const [summary, modeData, trendData, followupStats] = await Promise.all([
+          getRevenueSummary(), getRevenueByMode(this.period),
+          getDailyRevenueTrend(this.period), getFollowupStats()
+        ]);
+        this.summary = summary; this.modeData = modeData;
+        this.trendData = trendData; this.followupStats = followupStats;
+        this.$nextTick(() => { this.initCharts(); });
+      } finally { this.loading = false; }
+    },
+    initCharts() {
+      const ctx1 = this.$refs.chartRevenue;
+      if (ctx1 && this.trendData.length) {
+        this._chartRevenue = new Chart(ctx1, {
+          type: \'line\',
+          data: {
+            labels: this.trendData.map(d => {
+              const [y,m,dy] = d.date.split(\'-\').map(Number);
+              return new Date(y,m-1,dy).toLocaleDateString(\'en-IN\',{day:\'numeric\',month:\'short\'});
+            }),
+            datasets: [{ label: \'Revenue\', data: this.trendData.map(d=>d.amount),
+              borderColor: \'#0F6E56\', backgroundColor: \'rgba(15,110,86,0.08)\',
+              fill: true, tension: 0.4, pointRadius: 3, pointHoverRadius: 5 }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              y: { beginAtZero: true, ticks: { callback: v => \'₹\'+v.toLocaleString(\'en-IN\') } },
+              x: { ticks: { maxTicksLimit: 10, maxRotation: 0 } }
+            }
+          }
+        });
+      }
+      const ctx2 = this.$refs.chartMode;
+      if (ctx2 && this.hasModeData) {
+        this._chartMode = new Chart(ctx2, {
+          type: \'doughnut\',
+          data: {
+            labels: [\'Cash\',\'UPI\',\'Card / POS\',\'Bank Transfer\'],
+            datasets: [{ data: [this.modeData.cash,this.modeData.upi,this.modeData.card,this.modeData.bank_transfer],
+              backgroundColor: [\'#0F6E56\',\'#185FA5\',\'#666\',\'#BA7517\'],
+              borderWidth: 2, borderColor: \'#fff\' }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position:\'bottom\', labels:{ font:{size:12}, padding:12 } } }
+          }
+        });
+      }
+    },
+    setPeriod(p) { this.period=p; this.loadData(); },
+    fmtAmt(n) { return fmtAmount(n); }
+  },
+  mounted() { this.loadData(); },
+  beforeUnmount() {
+    if (this._chartRevenue) this._chartRevenue.destroy();
+    if (this._chartMode)    this._chartMode.destroy();
+  },
+  template: `
+    <div class="screen">
+      <div class="topbar"><div class="topbar-left"><h1>Reports</h1></div></div>
+      <div class="content">
+        <div class="loading-wrap" v-if="loading"><i class="ti ti-loader spin"></i> Loading…</div>
+        <template v-else>
+          <div class="analytics-grid" v-if="summary">
+            <div class="analytics-card analytics-teal"><div class="analytics-label">Today</div><div class="analytics-value">{{ fmtAmt(summary.todayTotal) }}</div></div>
+            <div class="analytics-card"><div class="analytics-label">This week</div><div class="analytics-value">{{ fmtAmt(summary.weekTotal) }}</div></div>
+            <div class="analytics-card"><div class="analytics-label">This month</div><div class="analytics-value">{{ fmtAmt(summary.monthTotal) }}</div></div>
+            <div class="analytics-card"><div class="analytics-label">Total invoices</div><div class="analytics-value">{{ summary.invoiceCount }}</div><div class="analytics-sub">Avg {{ fmtAmt(summary.avgInvoice) }} each</div></div>
+          </div>
+          <div class="period-selector">
+            <button class="period-btn" :class="{on:period===7}"  @click="setPeriod(7)">7 days</button>
+            <button class="period-btn" :class="{on:period===30}" @click="setPeriod(30)">30 days</button>
+            <button class="period-btn" :class="{on:period===90}" @click="setPeriod(90)">90 days</button>
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px">
+            <div class="chart-card">
+              <div class="chart-title">Revenue trend</div>
+              <div class="chart-wrap"><canvas ref="chartRevenue"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">Collections by mode</div>
+              <div class="chart-wrap" v-if="hasModeData"><canvas ref="chartMode"></canvas></div>
+              <div class="empty-section" v-else style="padding:40px 0"><i class="ti ti-chart-pie"></i><p>No data yet</p></div>
+            </div>
+          </div>
+          <div class="chart-card" v-if="followupStats">
+            <div class="chart-title">Follow-up compliance</div>
+            <div class="compliance-row"><span>Total cases</span><strong>{{ followupStats.total }}</strong></div>
+            <div class="compliance-row">
+              <div style="flex:1">
+                <div style="color:var(--teal-mid);font-weight:500">Completed — {{ followupStats.complianceRate }}%</div>
+                <div class="compliance-bar-bg"><div class="compliance-bar" :style="{width:followupStats.complianceRate+\'%\',background:\'var(--teal-mid)\'}"></div></div>
+              </div>
+              <strong style="color:var(--teal-mid);margin-left:16px">{{ followupStats.completed }}</strong>
+            </div>
+            <div class="compliance-row">
+              <div style="flex:1">
+                <div style="color:var(--amber-mid);font-weight:500">Overdue — {{ followupStats.overdueRate }}% of active</div>
+                <div class="compliance-bar-bg"><div class="compliance-bar" :style="{width:followupStats.overdueRate+\'%\',background:\'var(--amber-mid)\'}"></div></div>
+              </div>
+              <strong style="color:var(--amber-mid);margin-left:16px">{{ followupStats.overdue }}</strong>
+            </div>
+            <div class="compliance-row"><span>Active (on track)</span><span>{{ followupStats.active - followupStats.overdue }}</span></div>
+            <div class="compliance-row"><span style="color:var(--text-muted)">Declined</span><span style="color:var(--text-muted)">{{ followupStats.declined }}</span></div>
+          </div>
+        </template>
+      </div>
+    </div>
+  `
+};
+
+
 const WorkQueue = {
   name: 'WorkQueue',
   data() {
@@ -1505,12 +1835,13 @@ const NewInvoice = {
     return {
       patient: null, loadingPatient: false,
       patientQuery: '', patientResults: [], searchingPatients: false,
+      masterServices: [],
       form: {
         date: todayIso(),
         invoiceType: 'consultation',
         paymentMode: 'cash',
         notes: '',
-        services: [{ description:'', amount:'' }]
+        services: [{ masterId:'', description:'', amount:'' }]
       },
       saving: false, errors: {}
     };
@@ -1536,7 +1867,15 @@ const NewInvoice = {
       } finally { this.searchingPatients=false; }
     },
     selectPatient(p) { this.patient=p; this.patientQuery=''; this.patientResults=[]; },
-    addService() { this.form.services.push({ description:'', amount:'' }); },
+    addService() { this.form.services.push({ masterId:'', description:'', amount:'' }); },
+    pickMasterService(i, serviceId) {
+      if (!serviceId) return;
+      const svc = this.masterServices.find(s => s.id === serviceId);
+      if (svc) {
+        this.form.services[i].description = svc.name;
+        this.form.services[i].amount      = svc.defaultAmount || '';
+      }
+    },
     removeService(i) { if(this.form.services.length>1) this.form.services.splice(i,1); },
     validate() {
       this.errors={};
@@ -1575,6 +1914,7 @@ const NewInvoice = {
   },
   mounted() {
     if (this.$route.query.patientId) this.loadPatient(this.$route.query.patientId);
+    getActiveServices().then(s => { this.masterServices = s; }).catch(() => {});
   },
   template: `
     <div class="screen">
@@ -1631,6 +1971,10 @@ const NewInvoice = {
 
           <p class="form-section-title">Services</p>
           <div class="service-row" v-for="(svc,i) in form.services" :key="i">
+            <select v-if="masterServices.length" class="service-picker" v-model="svc.masterId" @change="pickMasterService(i, svc.masterId)">
+              <option value="">Custom / type below</option>
+              <option v-for="ms in masterServices" :key="ms.id" :value="ms.id">{{ ms.name }}</option>
+            </select>
             <input type="text" v-model="svc.description" class="form-input" placeholder="Service description" style="flex:1" />
             <div style="position:relative;width:130px">
               <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none">&#8377;</span>
@@ -1902,6 +2246,8 @@ const router = VueRouter.createRouter({
     { path:'/billing/new',        component:NewInvoice },
     { path:'/billing/:id',        component:InvoiceDetail },
     { path:'/reconciliation',     component:Reconciliation },
+    { path:'/analytics',            component:Analytics },
+    { path:'/config',               component:Config },
   ]
 });
 
@@ -1920,6 +2266,8 @@ const App = {
       if (p.startsWith('/followups'))      return 'followups';
       if (p.startsWith('/billing'))        return 'billing';
       if (p.startsWith('/reconciliation')) return 'reconciliation';
+      if (p.startsWith('/analytics'))      return 'analytics';
+      if (p.startsWith('/config'))         return 'config';
       return 'queue';
     },
     userInitials() {
@@ -1959,6 +2307,8 @@ const App = {
             <button class="nav-btn" :class="{on:section==='followups'}"      @click="$router.push('/followups')"><i class="ti ti-calendar-check"></i> Follow-ups</button>
             <button class="nav-btn" :class="{on:section==='billing'}"        @click="$router.push('/billing')"><i class="ti ti-receipt"></i> Billing</button>
             <button class="nav-btn" :class="{on:section==='reconciliation'}" @click="$router.push('/reconciliation')"><i class="ti ti-chart-bar"></i> Reconciliation</button>
+            <button class="nav-btn" :class="{on:section==='analytics'}"      @click="$router.push('/analytics')"><i class="ti ti-chart-line"></i> Reports</button>
+            <button class="nav-btn" :class="{on:section==='config'}"         @click="$router.push('/config')"><i class="ti ti-settings"></i> Settings</button>
           </nav>
           <div class="sidebar-footer">
             <div class="sidebar-user">

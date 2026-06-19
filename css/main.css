@@ -1319,3 +1319,189 @@ button { font-family: inherit; cursor: pointer; }
 }
 .recon-status.done    { background: var(--teal-light);  color: var(--teal-dark); }
 .recon-status.pending { background: var(--amber-light); color: var(--amber-dark); }
+
+/* -----------------------------------------------
+   STEP 12: CONFIG + ANALYTICS STYLES
+----------------------------------------------- */
+
+/* Config tabs */
+.config-tab-bar {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+  padding-bottom: 0;
+}
+.config-tab {
+  font-size: 13px;
+  padding: 8px 16px;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-family: inherit;
+}
+.config-tab:hover { color: var(--text-primary); }
+.config-tab.on {
+  color: var(--teal-mid);
+  border-bottom-color: var(--teal-mid);
+  font-weight: 500;
+}
+
+/* Service list rows */
+.service-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.service-item:last-child { border-bottom: none; }
+.service-item.inactive { opacity: 0.5; }
+.service-name   { font-size: 13px; font-weight: 500; color: var(--text-primary); flex: 1; }
+.service-cat    { font-size: 11px; color: var(--text-muted); margin-top: 2px; text-transform: capitalize; }
+.service-amount { font-size: 13px; font-weight: 600; color: var(--teal-mid); flex-shrink: 0; white-space: nowrap; }
+
+/* Toggle switch */
+.toggle-btn {
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+  position: relative;
+}
+.toggle-btn::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  top: 3px;
+  transition: left 0.2s;
+}
+.toggle-btn.on  { background: var(--teal-mid); }
+.toggle-btn.on::after { left: 18px; }
+.toggle-btn.off { background: #ccc; }
+.toggle-btn.off::after { left: 3px; }
+
+/* ANC week tags */
+.week-tag-list { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.week-tag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--teal-light);
+  color: var(--teal-dark);
+  padding: 4px 10px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.week-tag-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--teal-dark);
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.7;
+}
+.week-tag-remove:hover { opacity: 1; }
+
+/* Analytics summary cards */
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.analytics-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+}
+.analytics-label  { font-size: 11px; color: var(--text-muted); }
+.analytics-value  { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-top: 3px; }
+.analytics-sub    { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.analytics-teal   .analytics-value { color: var(--teal-mid); }
+.analytics-amber  .analytics-value { color: var(--amber-mid); }
+.analytics-red    .analytics-value { color: var(--red-mid); }
+
+/* Period selector */
+.period-selector {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.period-btn {
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border-mid);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+}
+.period-btn.on {
+  background: var(--teal-light);
+  border-color: var(--teal-border);
+  color: var(--teal-dark);
+  font-weight: 500;
+}
+
+/* Chart containers */
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.chart-title { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 14px; }
+.chart-wrap  { position: relative; height: 200px; }
+
+/* Compliance stats */
+.compliance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.compliance-row:last-child { border-bottom: none; }
+.compliance-bar-bg {
+  height: 6px;
+  background: #f0f0f0;
+  border-radius: 3px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+.compliance-bar {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--teal-mid);
+  transition: width 0.4s;
+}
+
+/* Service picker in invoice */
+.service-picker {
+  width: 200px;
+  flex-shrink: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--border-mid);
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-secondary);
+  background: var(--surface);
+}
