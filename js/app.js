@@ -2993,10 +2993,8 @@ const router = VueRouter.createRouter({
   history: VueRouter.createWebHashHistory(),
   routes: [
     { path:'/',                   redirect:'/dashboard' },
-    { path:'/queue',              redirect:'/followups' },
     { path:'/dashboard',          component:Dashboard },
     { path:'/appointments/new',   component:NewAppointment },
-    { path:'/queue',              component:WorkQueue },
     { path:'/patients',           component:PatientSearch },
     { path:'/patients/new',       component:NewPatient },
     { path:'/patients/:id',       component:PatientProfile },
