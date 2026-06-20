@@ -2505,56 +2505,6 @@ const BillingList = {
             </table>
           </div>
 
-          <!-- EDIT PANEL -->
-          <div class="detail-card" v-if="editing" style="margin-top:16px;border-color:var(--amber-border)">
-            <p class="form-section-title" style="margin-top:0;color:var(--amber-mid)"><i class="ti ti-edit"></i> Edit invoice</p>
-            <div v-for="(svc,i) in editForm.services" :key="i" class="service-row" style="margin-bottom:8px">
-              <input type="text" v-model="svc.description" class="form-input" style="flex:1" />
-              <div style="display:flex;align-items:center;gap:4px;border:1px solid var(--border-mid);border-radius:8px;padding:0 10px;flex-shrink:0">
-                <span style="font-size:12px;color:var(--text-muted)">&#8377;</span>
-                <input type="number" v-model="svc.amount" style="border:none;width:80px;font-size:13px;outline:none;background:transparent" />
-              </div>
-            </div>
-            <div class="form-row" style="margin-top:10px">
-              <div class="form-group">
-                <label class="form-label">Payment mode</label>
-                <select v-model="editForm.paymentMode" class="form-select">
-                  <option value="cash">Cash</option><option value="upi">UPI</option>
-                  <option value="card">Card / POS</option><option value="bank_transfer">Bank Transfer</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Notes</label>
-                <input type="text" v-model="editForm.notes" class="form-input" />
-              </div>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Reason for edit <span class="form-required">*</span></label>
-              <input type="text" v-model="editReason" class="form-input" placeholder="e.g. Corrected service amount, wrong mode selected" />
-            </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
-              <div style="font-size:13px;font-weight:600">Revised total: {{ fmtAmt(editTotal) }}</div>
-              <div style="display:flex;gap:8px">
-                <button class="btn btn-secondary" @click="cancelEdit">Cancel</button>
-                <button class="btn btn-primary" @click="saveEdit" :disabled="savingEdit||!editReason.trim()">
-                  <i class="ti ti-check"></i> {{ savingEdit ? 'Saving\u2026' : 'Save edit' }}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- EDIT HISTORY -->
-          <div v-if="edits.length" style="margin-top:16px">
-            <div class="section-header"><div class="section-title"><span class="edit-badge"><i class="ti ti-edit"></i> Edit history</span></div></div>
-            <div class="section-card">
-              <div class="edit-history-row" v-for="e in edits" :key="e.id">
-                <div class="edit-meta">{{ fmtTs(e.editedAt) }} &middot; {{ e.editedBy }}</div>
-                <div class="edit-reason">{{ e.reason }}</div>
-                <div style="margin-top:4px;color:var(--text-muted);font-size:11px">{{ fmtAmt(e.before.totalAmount) }} \u2192 {{ fmtAmt(e.after.totalAmount) }}</div>
-              </div>
-            </div>
-          </div>
-
         </template>
       </div>
     </div>
@@ -2562,7 +2512,6 @@ const BillingList = {
 };
 
 // ----------------------------------------------------------------
-
 const NewInvoice = {
   name: 'NewInvoice',
   data() {
@@ -2843,7 +2792,58 @@ const InvoiceDetail = {
               <span class="amount">{{ fmtAmt(invoice.totalAmount) }}</span>
             </div>
           </div>
-          <div style="font-size:12px;color:var(--text-muted)" v-if="invoice.notes">Notes: {{ invoice.notes }}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:8px;padding:0 16px 16px" v-if="invoice.notes">Notes: {{ invoice.notes }}</div>
+
+          <!-- EDIT PANEL -->
+          <div class="detail-card" v-if="editing" style="margin-top:16px;border-color:var(--amber-border)">
+            <p class="form-section-title" style="margin-top:0;color:var(--amber-mid)"><i class="ti ti-edit"></i> Edit invoice</p>
+            <div v-for="(svc,i) in editForm.services" :key="i" class="service-row" style="margin-bottom:8px">
+              <input type="text" v-model="svc.description" class="form-input" style="flex:1" />
+              <div style="display:flex;align-items:center;gap:4px;border:1px solid var(--border-mid);border-radius:8px;padding:0 10px;flex-shrink:0">
+                <span style="font-size:12px;color:var(--text-muted)">&#8377;</span>
+                <input type="number" v-model="svc.amount" style="border:none;width:80px;font-size:13px;outline:none;background:transparent" />
+              </div>
+            </div>
+            <div class="form-row" style="margin-top:10px">
+              <div class="form-group">
+                <label class="form-label">Payment mode</label>
+                <select v-model="editForm.paymentMode" class="form-select">
+                  <option value="cash">Cash</option><option value="upi">UPI</option>
+                  <option value="card">Card / POS</option><option value="bank_transfer">Bank Transfer</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Notes</label>
+                <input type="text" v-model="editForm.notes" class="form-input" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Reason for edit <span class="form-required">*</span></label>
+              <input type="text" v-model="editReason" class="form-input" placeholder="e.g. Corrected service amount, wrong mode selected" />
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+              <div style="font-size:13px;font-weight:600">Revised total: {{ fmtAmt(editTotal) }}</div>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-secondary" @click="cancelEdit">Cancel</button>
+                <button class="btn btn-primary" @click="saveEdit" :disabled="savingEdit||!editReason.trim()">
+                  <i class="ti ti-check"></i> {{ savingEdit ? 'Saving…' : 'Save edit' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- EDIT HISTORY -->
+          <div v-if="edits && edits.length" style="margin-top:16px">
+            <div class="section-header"><div class="section-title"><span class="edit-badge"><i class="ti ti-edit"></i> Edit history</span></div></div>
+            <div class="section-card">
+              <div class="edit-history-row" v-for="e in edits" :key="e.id">
+                <div class="edit-meta">{{ fmtTs(e.editedAt) }} · {{ e.editedBy }}</div>
+                <div class="edit-reason">{{ e.reason }}</div>
+                <div style="margin-top:4px;color:var(--text-muted);font-size:11px">{{ fmtAmt(e.before.totalAmount) }} → {{ fmtAmt(e.after.totalAmount) }}</div>
+              </div>
+            </div>
+          </div>
+
         </template>
       </div>
     </div>
