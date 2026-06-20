@@ -3081,7 +3081,6 @@ const App = {
             <button class="nav-btn" :class="{on:section==='dashboard'}"      @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Dashboard</button>
             <button class="nav-btn" :class="{on:section==='followups'}"      @click="$router.push('/followups')"><i class="ti ti-calendar-check"></i> Follow-ups</button>
             <button class="nav-btn" :class="{on:section==='patients'}"       @click="$router.push('/patients')"><i class="ti ti-users"></i> Patients</button>
-            <button class="nav-btn" :class="{on:section==='followups'}"      @click="$router.push('/followups')"><i class="ti ti-calendar-check"></i> Follow-ups</button>
             <button class="nav-btn" :class="{on:section==='billing'}"        @click="$router.push('/billing')"><i class="ti ti-receipt"></i> Billing</button>
             <button class="nav-btn" v-if="role==='doctor'" :class="{on:section==='reconciliation'}" @click="$router.push('/reconciliation')"><i class="ti ti-chart-bar"></i> Reconciliation</button>
             <button class="nav-btn" v-if="role==='doctor'" :class="{on:section==='analytics'}"      @click="$router.push('/analytics')"><i class="ti ti-chart-line"></i> Reports</button>
