@@ -2978,6 +2978,146 @@ const AuditLog = {
 };
 
 
+// ================================================================
+//  ANALYTICS / REPORTS SCREEN  (Step 12)
+// ================================================================
+
+const Analytics = {
+  name: 'Analytics',
+  data() {
+    return {
+      period: 30,
+      summary: null, modeData: null, trendData: [], followupStats: null,
+      loading: true
+    };
+  },
+  computed: {
+    hasModeData() {
+      return this.modeData && Object.values(this.modeData).some(v => v > 0);
+    }
+  },
+  methods: {
+    async loadData() {
+      this.loading = true;
+      if (this._chartRevenue) { this._chartRevenue.destroy(); this._chartRevenue = null; }
+      if (this._chartMode)    { this._chartMode.destroy();    this._chartMode    = null; }
+      try {
+        const [summary, modeData, trendData, followupStats] = await Promise.all([
+          getRevenueSummary(), getRevenueByMode(this.period),
+          getDailyRevenueTrend(this.period), getFollowupStats()
+        ]);
+        this.summary = summary; this.modeData = modeData;
+        this.trendData = trendData; this.followupStats = followupStats;
+        this.$nextTick(() => { this.initCharts(); });
+      } finally { this.loading = false; }
+    },
+    initCharts() {
+      const ctx1 = this.$refs.chartRevenue;
+      if (ctx1 && this.trendData.length) {
+        this._chartRevenue = new Chart(ctx1, {
+          type: 'line',
+          data: {
+            labels: this.trendData.map(d => {
+              const [y,m,dy] = d.date.split('-').map(Number);
+              return new Date(y,m-1,dy).toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+            }),
+            datasets: [{ label: 'Revenue', data: this.trendData.map(d=>d.amount),
+              borderColor: '#0F6E56', backgroundColor: 'rgba(15,110,86,0.08)',
+              fill: true, tension: 0.4, pointRadius: 3, pointHoverRadius: 5 }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              y: { beginAtZero: true, ticks: { callback: v => '\u20b9'+v.toLocaleString('en-IN') } },
+              x: { ticks: { maxTicksLimit: 10, maxRotation: 0 } }
+            }
+          }
+        });
+      }
+      const ctx2 = this.$refs.chartMode;
+      if (ctx2 && this.hasModeData) {
+        this._chartMode = new Chart(ctx2, {
+          type: 'doughnut',
+          data: {
+            labels: ['Cash','UPI','Card / POS','Bank Transfer'],
+            datasets: [{ data: [this.modeData.cash,this.modeData.upi,this.modeData.card,this.modeData.bank_transfer],
+              backgroundColor: ['#0F6E56','#185FA5','#666','#BA7517'],
+              borderWidth: 2, borderColor: '#fff' }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position:'bottom', labels:{ font:{size:12}, padding:12 } } }
+          }
+        });
+      }
+    },
+    setPeriod(p) { this.period=p; this.loadData(); },
+    fmtAmt(n) { return fmtAmount(n); }
+  },
+  mounted() { this.loadData(); },
+  beforeUnmount() {
+    if (this._chartRevenue) this._chartRevenue.destroy();
+    if (this._chartMode)    this._chartMode.destroy();
+  },
+  template: `
+    <div class="screen">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="topbar-breadcrumb">
+            <button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-arrow-left"></i> Home</button>
+            <span class="sep">/</span><span class="current">Reports</span>
+          </div>
+        </div>
+      </div>
+      <div class="content">
+        <div class="loading-wrap" v-if="loading"><i class="ti ti-loader spin"></i> Loading\u2026</div>
+        <template v-else>
+          <div class="analytics-grid" v-if="summary">
+            <div class="analytics-card analytics-teal"><div class="analytics-label">Today</div><div class="analytics-value">{{ fmtAmt(summary.todayTotal) }}</div></div>
+            <div class="analytics-card"><div class="analytics-label">This week</div><div class="analytics-value">{{ fmtAmt(summary.weekTotal) }}</div></div>
+            <div class="analytics-card"><div class="analytics-label">This month</div><div class="analytics-value">{{ fmtAmt(summary.monthTotal) }}</div></div>
+            <div class="analytics-card"><div class="analytics-label">Total invoices</div><div class="analytics-value">{{ summary.invoiceCount }}</div><div class="analytics-sub">Avg {{ fmtAmt(summary.avgInvoice) }} each</div></div>
+          </div>
+          <div class="period-selector">
+            <button class="period-btn" :class="{on:period===7}"  @click="setPeriod(7)">7 days</button>
+            <button class="period-btn" :class="{on:period===30}" @click="setPeriod(30)">30 days</button>
+            <button class="period-btn" :class="{on:period===90}" @click="setPeriod(90)">90 days</button>
+          </div>
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px">
+            <div class="chart-card">
+              <div class="chart-title">Revenue trend</div>
+              <div class="chart-wrap"><canvas ref="chartRevenue"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">Collections by mode</div>
+              <div class="chart-wrap" v-if="hasModeData"><canvas ref="chartMode"></canvas></div>
+              <div class="empty-section" v-else style="padding:40px 0"><i class="ti ti-chart-pie"></i><p>No data yet</p></div>
+            </div>
+          </div>
+          <div class="chart-card" v-if="followupStats">
+            <div class="chart-title">Follow-up compliance</div>
+            <div class="compliance-row"><span>Total cases</span><strong>{{ followupStats.total }}</strong></div>
+            <div class="compliance-row">
+              <div style="flex:1"><div style="color:var(--teal-mid);font-weight:500">Completed \u2014 {{ followupStats.complianceRate }}%</div>
+              <div class="compliance-bar-bg"><div class="compliance-bar" :style="{width:followupStats.complianceRate+'%',background:'var(--teal-mid)'}"></div></div></div>
+              <strong style="color:var(--teal-mid);margin-left:16px">{{ followupStats.completed }}</strong>
+            </div>
+            <div class="compliance-row">
+              <div style="flex:1"><div style="color:var(--amber-mid);font-weight:500">Overdue \u2014 {{ followupStats.overdueRate }}% of active</div>
+              <div class="compliance-bar-bg"><div class="compliance-bar" :style="{width:followupStats.overdueRate+'%',background:'var(--amber-mid)'}"></div></div></div>
+              <strong style="color:var(--amber-mid);margin-left:16px">{{ followupStats.overdue }}</strong>
+            </div>
+            <div class="compliance-row"><span>Active (on track)</span><span>{{ followupStats.active - followupStats.overdue }}</span></div>
+            <div class="compliance-row"><span style="color:var(--text-muted)">Declined</span><span style="color:var(--text-muted)">{{ followupStats.declined }}</span></div>
+          </div>
+        </template>
+      </div>
+    </div>
+  `
+};
+
+
 const router = VueRouter.createRouter({
   history: VueRouter.createWebHashHistory(),
   routes: [
