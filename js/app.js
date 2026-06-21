@@ -1760,13 +1760,16 @@ const NewAppointment = {
 //  DASHBOARD — daily operations centre
 // ================================================================
 
+// ================================================================
+//  DASHBOARD — tile home screen
+// ================================================================
+
 const Dashboard = {
   name: 'Dashboard',
   data() {
     return {
-      stats: null, statsLoading: true,
-      apptDate: todayIso(), appts: [], apptsLoading: true, savingApptId: null,
-      reminders: [], remindersLoading: true
+      stats: null, loading: true,
+      apptTotal: 0, apptSeen: 0, apptWaiting: 0
     };
   },
   computed: {
@@ -1781,203 +1784,105 @@ const Dashboard = {
       return new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
     },
     role()        { return this.$root.role; },
-    isApptToday() { return this.apptDate === todayIso(); },
-    apptDateLabel() {
-      const [y,m,d] = this.apptDate.split('-').map(Number);
-      return new Date(y,m-1,d).toLocaleDateString('en-IN',{day:'numeric',month:'short',weekday:'short'});
-    },
-    apptsByDoctor() {
-      const seen = new Set(), order = [];
-      this.appts.forEach(a => { if (!seen.has(a.doctorName)) { seen.add(a.doctorName); order.push(a.doctorName); } });
-      return order.map(doc => ({ doctor: doc, appts: this.appts.filter(a => a.doctorName === doc) }));
-    },
-    apptStats() {
-      return {
-        scheduled: this.appts.filter(a => a.status === 'scheduled').length,
-        seen:      this.appts.filter(a => a.status === 'seen').length,
-        total:     this.appts.length
-      };
-    }
+    isDoctor()    { return this.$root.role==='doctor' || this.$root.role==='superuser'; },
+    overdueCount(){ return this.stats ? this.stats.overdueCount : 0; }
   },
   methods: {
-    loadAll() {
-      this.statsLoading=true; this.remindersLoading=true;
-      getDashboardStats(this.$root.role).then(s => { this.stats=s; }).finally(() => { this.statsLoading=false; });
-      this.loadAppts();
-      getTodaysPendingReminders().then(r => { this.reminders=r; }).finally(() => { this.remindersLoading=false; });
-    },
-    async loadAppts() {
-      this.apptsLoading=true;
-      try { this.appts = await getAppointmentsByDate(this.apptDate); }
-      catch(e) { this.appts=[]; } finally { this.apptsLoading=false; }
-    },
-    prevDay()  { this.apptDate=addDays(this.apptDate,-1); this.loadAppts(); },
-    nextDay()  { this.apptDate=addDays(this.apptDate, 1); this.loadAppts(); },
-    goToday()  { this.apptDate=todayIso(); this.loadAppts(); },
-    async markSeen(appt) {
-      if (this.savingApptId) return;
-      this.savingApptId=appt.id;
+    async loadAll() {
+      this.loading = true;
       try {
-        await updateAppointmentStatus(appt.id,'seen'); appt.status='seen';
-        if (appt.patientId && confirm('Open encounter form for '+appt.patientName+'?'))
-          this.$router.push('/encounters/new?patientId='+appt.patientId);
-      } finally { this.savingApptId=null; }
+        const [stats, appts] = await Promise.all([
+          getDashboardStats(this.$root.role),
+          getTodayAppointments()
+        ]);
+        this.stats       = stats;
+        this.apptTotal   = appts.length;
+        this.apptSeen    = appts.filter(a => a.status === 'seen').length;
+        this.apptWaiting = appts.filter(a => a.status === 'scheduled').length;
+      } catch(e) { console.error(e); }
+      finally { this.loading = false; }
     },
-    async markNoShow(appt) {
-      if (this.savingApptId) return;
-      this.savingApptId=appt.id;
-      try { await updateAppointmentStatus(appt.id,'no_show'); appt.status='no_show'; }
-      finally { this.savingApptId=null; }
-    },
-    async cancelAppt(appt) {
-      if (!confirm('Cancel appointment for '+appt.patientName+'?')) return;
-      this.savingApptId=appt.id;
-      try { await updateAppointmentStatus(appt.id,'cancelled'); appt.status='cancelled'; }
-      finally { this.savingApptId=null; }
-    },
-    apptWaLink(appt) { return appointmentWaLink(appt, this.apptDateLabel); },
-    async markSent(r) {
-      await updateReminderStatus(r.id,'sent');
-      this.reminders=this.reminders.filter(x=>x.id!==r.id);
-      if (this.stats) this.stats.pendingToday=Math.max(0,(this.stats.pendingToday||0)-1);
-    },
-    async skipReminder(r) {
-      await updateReminderStatus(r.id,'skipped');
-      this.reminders=this.reminders.filter(x=>x.id!==r.id);
-    },
-    waLink(r)      { return buildReminderWaLink(r); },
-    fmtAmt(n)      { return fmtAmount(n); },
-    fmtDate(d)     { return fmtDateShort(d); },
-    apptTypeLbl(t) { return (APPOINTMENT_TYPES.find(x=>x.value===t)||{}).label||t||''; },
-    statusCls(s)   { return {scheduled:'pill-teal',seen:'pill-green',no_show:'pill-amber',cancelled:'pill-gray'}[s]||'pill-gray'; },
-    statusTxt(s)   { return {scheduled:'Scheduled',seen:'Seen',no_show:'No-show',cancelled:'Cancelled'}[s]||s; },
-    rPillCls(t)    { return {anc:'pill-teal',vaccination:'pill-blue',post_procedure:'pill-gray',annual_recall:'pill-gray'}[t]||'pill-gray'; },
-    rPillTxt(t)    { return {anc:'ANC',vaccination:'Vaccine',post_procedure:'Post-op',annual_recall:'Recall'}[t]||'Follow-up'; },
-    initials(n)    { return patientInitials(n); },
-    avCls(n)       { return patientAvatarClass(n); }
+    go(p)     { this.$router.push(p); },
+    fmtAmt(n) { return fmtAmount(n); }
   },
   mounted() { this.loadAll(); },
   template: `
-    <div class="screen">
-      <div class="content">
+    <div class="home-screen">
 
-        <!-- Header -->
-        <div class="dash-header">
-          <div class="dash-greeting">{{ greeting }}, {{ firstName }}</div>
-          <div class="dash-date">{{ todayLabel }}</div>
-        </div>
+      <div class="home-hi">{{ greeting }}, {{ firstName }}</div>
+      <div class="home-date">{{ todayLabel }}</div>
 
-        <!-- Stat cards -->
-        <div class="dash-stats" style="margin-bottom:14px" :style="role==='doctor'?'grid-template-columns:repeat(5,minmax(0,1fr))':'grid-template-columns:repeat(4,minmax(0,1fr))'">
-          <div class="dash-stat teal">
-            <div class="dash-stat-label">Appointments today</div>
-            <div class="dash-stat-value">{{ apptsLoading&&isApptToday ? '\u2014' : apptStats.scheduled }}</div>
-            <div class="dash-stat-sub">{{ apptStats.seen }} seen of {{ apptStats.total }} booked</div>
-          </div>
-          <div class="dash-stat">
-            <div class="dash-stat-label">Reminders today</div>
-            <div class="dash-stat-value" style="font-size:22px">{{ statsLoading ? '\u2014' : (stats?stats.pendingToday:'\u2014') }}</div>
-            <div class="dash-stat-sub">Pending to send</div>
-          </div>
-          <div class="dash-stat amber">
-            <div class="dash-stat-label">Overdue cases</div>
-            <div class="dash-stat-value">{{ statsLoading ? '\u2014' : (stats?stats.overdueCount:'\u2014') }}</div>
-            <div class="dash-stat-sub">Active follow-ups</div>
-          </div>
-          <div class="dash-stat blue">
-            <div class="dash-stat-label">New this month</div>
-            <div class="dash-stat-value">{{ statsLoading ? '\u2014' : (stats?stats.monthPatients:'\u2014') }}</div>
-            <div class="dash-stat-sub">Patients registered</div>
-          </div>
-          <div class="dash-stat" v-if="role==='doctor'">
-            <div class="dash-stat-label">Today\u2019s revenue</div>
-            <div class="dash-stat-value" style="font-size:20px;color:var(--teal-mid)">{{ statsLoading ? '\u2014' : fmtAmt(stats?stats.todayRevenue:0) }}</div>
-            <div class="dash-stat-sub">{{ stats ? stats.todayInvoiceCount+' invoice'+(stats.todayInvoiceCount===1?'':'s') : '' }}</div>
+      <!-- Quick actions -->
+      <div class="home-actions">
+        <button class="home-action ha-primary" @click="go('/appointments/new')"><i class="ti ti-calendar-plus"></i> Book appointment</button>
+        <button class="home-action" @click="go('/patients/new')"><i class="ti ti-user-plus"></i> New patient</button>
+        <button class="home-action" @click="go('/followups/new')"><i class="ti ti-calendar-check"></i> New follow-up</button>
+        <button class="home-action" @click="go('/encounters/new')"><i class="ti ti-stethoscope"></i> New encounter</button>
+        <button class="home-action" @click="go('/billing/new')"><i class="ti ti-receipt"></i> New invoice</button>
+      </div>
+
+      <!-- Tile grid -->
+      <div class="tile-grid">
+        <div class="tile t-coral" @click="go('/appointments')">
+          <div class="tile-num">{{ loading ? '\u2026' : apptWaiting }}</div>
+          <div>
+            <div class="tile-label">Appointments today</div>
+            <div class="tile-sub">{{ apptSeen }} seen \u00b7 {{ apptTotal }} total</div>
           </div>
         </div>
-
-        <!-- Quick actions -->
-        <div class="dash-actions" style="margin-bottom:16px">
-          <button class="dash-action-btn primary" @click="$router.push('/appointments/new')"><i class="ti ti-calendar-plus"></i> Book appointment</button>
-          <button class="dash-action-btn" @click="$router.push('/patients/new')"><i class="ti ti-user-plus"></i> New patient</button>
-          <button class="dash-action-btn" @click="$router.push('/followups/new')"><i class="ti ti-calendar-check"></i> New follow-up</button>
-          <button class="dash-action-btn" @click="$router.push('/encounters/new')"><i class="ti ti-stethoscope"></i> New encounter</button>
-          <button class="dash-action-btn" @click="$router.push('/billing/new')"><i class="ti ti-receipt"></i> New invoice</button>
+        <div class="tile t-amber" @click="go('/followups')">
+          <div class="tile-num">{{ loading ? '\u2026' : (stats ? stats.pendingToday : 0) }}</div>
+          <div>
+            <div class="tile-label">Reminders today</div>
+            <div class="tile-sub">WhatsApp messages pending</div>
+          </div>
         </div>
-
-        <!-- Main panels -->
-        <div class="dash-cols">
-
-          <!-- LEFT: Appointment day view -->
-          <div class="dash-panel">
-            <div class="dash-panel-header">
-              <span class="dash-panel-title"><i class="ti ti-calendar" style="color:var(--teal-mid)"></i> Appointments</span>
-              <div style="display:flex;align-items:center;gap:6px">
-                <button class="date-nav-btn" @click="prevDay" style="width:24px;height:24px;font-size:12px"><i class="ti ti-chevron-left"></i></button>
-                <span style="font-size:12px;font-weight:500;color:var(--text-secondary)">{{ apptDateLabel }}</span>
-                <button class="date-nav-btn" @click="nextDay" style="width:24px;height:24px;font-size:12px"><i class="ti ti-chevron-right"></i></button>
-                <button class="appt-today-btn" v-if="!isApptToday" @click="goToday">Today</button>
-                <button class="dash-action-btn" style="padding:3px 10px;font-size:11px" @click="$router.push('/appointments/new')"><i class="ti ti-plus"></i> Book</button>
-              </div>
-            </div>
-            <div class="loading-wrap" style="padding:24px" v-if="apptsLoading"><i class="ti ti-loader spin"></i></div>
-            <div class="dash-panel-empty" v-else-if="appts.length===0">
-              <i class="ti ti-calendar" style="font-size:24px;opacity:.35"></i><br>No appointments for this day
-              <br><button class="btn btn-primary btn-sm" style="margin-top:10px" @click="$router.push('/appointments/new')">Book one</button>
-            </div>
-            <template v-else>
-              <div v-for="group in apptsByDoctor" :key="group.doctor">
-                <div style="padding:7px 14px;background:#f8faf9;border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.04em">
-                  {{ group.doctor }}
-                  <span style="font-weight:400;color:var(--text-muted)"> \u00b7 {{ group.appts.filter(a=>a.status==='scheduled').length }} waiting</span>
-                </div>
-                <div class="dash-panel-row" v-for="(appt,i) in group.appts" :key="appt.id"
-                     :style="appt.status==='cancelled'?'opacity:.45':appt.status==='seen'?'opacity:.65':''">
-                  <span style="font-size:11px;font-weight:700;color:var(--text-muted);width:18px;flex-shrink:0">{{ i+1 }}</span>
-                  <div style="flex:1;min-width:0">
-                    <div style="font-size:13px;font-weight:500">{{ appt.patientName }}<span class="walkin-badge" v-if="appt.isWalkIn">Walk-in</span></div>
-                    <div style="font-size:11px;color:var(--text-muted)">{{ apptTypeLbl(appt.type) }}</div>
-                  </div>
-                  <span class="pill" :class="statusCls(appt.status)" style="font-size:10px;flex-shrink:0">{{ statusTxt(appt.status) }}</span>
-                  <template v-if="appt.status==='scheduled'">
-                    <a v-if="apptWaLink(appt)" :href="apptWaLink(appt)" target="_blank" class="action-btn action-btn-wa" style="flex-shrink:0" title="WA reminder"><i class="ti ti-brand-whatsapp"></i></a>
-                    <button class="action-btn" style="flex-shrink:0;color:var(--teal-mid);border-color:var(--teal-border);font-size:11px" @click="markSeen(appt)" :disabled="savingApptId===appt.id"><i class="ti ti-check"></i> Seen</button>
-                    <button class="action-btn" style="flex-shrink:0;color:var(--amber-mid);border-color:var(--amber-border)" @click="markNoShow(appt)" :disabled="savingApptId===appt.id" title="No-show"><i class="ti ti-user-x"></i></button>
-                    <button class="action-btn action-btn-flag" style="flex-shrink:0" @click="cancelAppt(appt)" :disabled="savingApptId===appt.id" title="Cancel"><i class="ti ti-x"></i></button>
-                  </template>
-                  <button v-else-if="appt.status==='seen'&&appt.patientId" class="action-btn" style="flex-shrink:0;font-size:11px" @click="$router.push('/encounters/new?patientId='+appt.patientId)"><i class="ti ti-stethoscope"></i></button>
-                </div>
-              </div>
-            </template>
+        <div class="tile t-blue" @click="go('/followups')">
+          <div class="tile-num">{{ loading ? '\u2026' : overdueCount }}</div>
+          <div>
+            <div class="tile-label">Overdue follow-ups</div>
+            <div class="tile-sub">Need a call today</div>
           </div>
-
-          <!-- RIGHT: Reminders -->
-          <div class="dash-panel">
-            <div class="dash-panel-header">
-              <span class="dash-panel-title"><i class="ti ti-brand-whatsapp" style="color:#25D366"></i> Reminders to send</span>
-              <span style="font-size:12px;color:var(--text-muted)">{{ reminders.length }} pending</span>
-            </div>
-            <div class="loading-wrap" style="padding:24px" v-if="remindersLoading"><i class="ti ti-loader spin"></i></div>
-            <div class="dash-panel-empty" v-else-if="reminders.length===0">
-              <i class="ti ti-circle-check" style="font-size:24px;color:var(--teal-mid);opacity:.7"></i><br>All clear \u2014 no pending reminders
-            </div>
-            <template v-else>
-              <div class="dash-panel-row" v-for="r in reminders" :key="r.id">
-                <div class="avatar avatar-sm" :class="avCls(r.patientName)">{{ initials(r.patientName) }}</div>
-                <div style="flex:1;min-width:0">
-                  <div style="font-size:13px;font-weight:500">{{ r.patientName }}</div>
-                  <div style="font-size:11px;color:var(--text-muted)">{{ r.subType }} \u00b7 {{ fmtDate(r.dueDate) }}</div>
-                </div>
-                <span class="pill" :class="rPillCls(r.followupType)" style="font-size:10px;flex-shrink:0">{{ rPillTxt(r.followupType) }}</span>
-                <a v-if="waLink(r)" :href="waLink(r)" target="_blank" class="action-btn action-btn-wa" style="flex-shrink:0"><i class="ti ti-brand-whatsapp"></i></a>
-                <button class="action-btn" style="flex-shrink:0;color:var(--teal-mid);border-color:var(--teal-border)" @click="markSent(r)" title="Mark sent"><i class="ti ti-check"></i></button>
-                <button class="action-btn" style="flex-shrink:0;color:var(--text-muted)" @click="skipReminder(r)" title="Skip">Skip</button>
-              </div>
-            </template>
+        </div>
+        <div class="tile t-teal" @click="go('/patients')">
+          <div class="tile-num">{{ loading ? '\u2026' : (stats ? stats.monthPatients : 0) }}</div>
+          <div>
+            <div class="tile-label">New patients</div>
+            <div class="tile-sub">Registered this month</div>
           </div>
-
+        </div>
+        <div class="tile t-dark" @click="go('/billing')">
+          <div class="tile-num sm" v-if="isDoctor">{{ loading ? '\u2026' : fmtAmt(stats ? stats.todayRevenue : 0) }}</div>
+          <div class="tile-num sm" v-else>\u2192</div>
+          <div>
+            <div class="tile-label">Billing</div>
+            <div class="tile-sub" v-if="isDoctor">Today\u2019s collections</div>
+            <div class="tile-sub" v-else>Create or view invoices</div>
+          </div>
+        </div>
+        <div class="tile t-mauve" @click="go(isDoctor ? '/analytics' : '/patients')">
+          <div class="tile-num sm">\u2192</div>
+          <div>
+            <div class="tile-label" v-if="isDoctor">Reports</div>
+            <div class="tile-sub"  v-if="isDoctor">Revenue \u00b7 compliance</div>
+            <div class="tile-label" v-else>All patients</div>
+            <div class="tile-sub"  v-else>Search or register</div>
+          </div>
         </div>
       </div>
+
+      <!-- Urgent strip -->
+      <div class="urgent-strip" v-if="!loading && overdueCount > 0">
+        <i class="ti ti-alert-triangle"></i>
+        <div>
+          <strong>{{ overdueCount }} overdue follow-up{{ overdueCount===1?'':'s' }}</strong>
+          need attention today
+        </div>
+        <button class="btn btn-secondary btn-sm" style="margin-left:auto;flex-shrink:0" @click="go('/followups')">
+          View \u2192
+        </button>
+      </div>
+
     </div>
   `
 };
