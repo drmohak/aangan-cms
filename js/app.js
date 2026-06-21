@@ -331,7 +331,7 @@ const ChildRegistration = {
 
 const PatientProfile = {
   name: 'PatientProfile',
-  data() { return { patient:null, loading:true, loadError:null, children:[], mother:null, followups:[], encounters:[], showAllFollowups:false }; },
+  data() { return { patient:null, loading:true, loadError:null, children:[], mother:null, followups:[], encounters:[], showAllFollowups:false, _showDeleteModal:false, _deleteReason:'', _deleteConfirm:'', _deleting:false, _linkedCount:null }; },
   computed: {
     isChild()     { return this.patient&&this.patient.type==='child'; },
     initials()    { return this.patient?patientInitials(this.patient.name):'?'; },
@@ -388,7 +388,23 @@ const PatientProfile = {
     },
     ci(n)  { return patientInitials(n); },
     ca(n)  { return patientAvatarClass(n); },
-    fmtEncDate(d) { return fmtDateShort(d); }
+    fmtEncDate(d) { return fmtDateShort(d); },
+    isDocOrSuper() { return ['doctor','superuser'].includes(this.$root.role); },
+    isSuperUser()  { return this.$root.role === 'superuser'; },
+    async doArchive() {
+      if (!confirm('Archive this patient? They will be hidden from search. You can restore them anytime.')) return;
+      await archivePatient(this.patient.id);
+      this.patient = { ...this.patient, archived: true };
+    },
+    async doRestore() {
+      await restorePatient(this.patient.id);
+      this.patient = { ...this.patient, archived: false };
+    },
+    async openDeleteModal() {
+      this._linkedCount = await getPatientLinkedCount(this.patient.id);
+      this._deleteReason = ''; this._deleteConfirm = '';
+      this._showDeleteModal = true;
+    }
   },
   mounted() { this.loadPatient(); },
   watch: { '$route.params.id'() { this.loadPatient(); } },
@@ -532,6 +548,46 @@ const PatientProfile = {
             </div>
           </div>
         </template>
+
+      <!-- DANGER ZONE -->
+      <div class="danger-zone" v-if="!loading && patient && isDocOrSuper()" style="margin:16px">
+        <div class="danger-zone-title"><i class="ti ti-alert-triangle"></i> Danger zone</div>
+        <div class="danger-zone-row">
+          <button class="dz-btn dz-archive" v-if="!patient.archived" @click="doArchive()"><i class="ti ti-archive"></i> Archive patient</button>
+          <button class="dz-btn dz-restore" v-if="patient.archived"  @click="doRestore()"><i class="ti ti-archive-off"></i> Restore patient</button>
+          <button class="dz-btn dz-delete"  v-if="isSuperUser()" @click="openDeleteModal"><i class="ti ti-trash"></i> Delete permanently</button>
+        </div>
+      </div>
+
+      <!-- DELETE MODAL -->
+      <div class="modal-overlay" v-if="_showDeleteModal" @click.self="_showDeleteModal=false">
+        <div class="modal-box">
+          <div class="modal-title"><i class="ti ti-trash" style="color:var(--red-mid)"></i> Delete patient permanently</div>
+          <div class="modal-body">All records for <strong>{{ patient ? patient.name : '' }}</strong> will be permanently erased.</div>
+          <div class="modal-warn" v-if="_linkedCount && _linkedCount.total>0">
+            Will also delete: {{ _linkedCount.followups }} follow-ups, {{ _linkedCount.invoices }} invoices,
+            {{ _linkedCount.encounters }} encounters, {{ _linkedCount.children }} child records
+            (<strong>{{ _linkedCount.total }} linked records total</strong>).
+          </div>
+          <div class="form-group" style="margin-bottom:12px">
+            <label class="form-label">Reason <span class="form-required">*</span></label>
+            <input type="text" v-model="_deleteReason" class="form-input" placeholder="Why is this record being deleted?" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Type patient name to confirm: <strong>{{ patient ? patient.name : '' }}</strong></label>
+            <input type="text" v-model="_deleteConfirm" class="form-input" />
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" @click="_showDeleteModal=false">Cancel</button>
+            <button class="btn" style="background:var(--red-mid);color:white;border-color:var(--red-mid)"
+              :disabled="_deleting||!_deleteReason.trim()||_deleteConfirm.trim().toLowerCase()!==(patient?patient.name.toLowerCase():'')"
+              @click="(async()=>{ _deleting=true; try{ await hardDeletePatient(patient,_deleteReason); _showDeleteModal=false; $router.push('/patients'); }catch(e){alert(e.message);}finally{_deleting=false;} })()">
+              {{ _deleting ? 'Deleting\u2026' : 'Delete permanently' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
       </div>
     </div>
   `
@@ -842,7 +898,8 @@ const FollowupDetail = {
     today()              { return todayIso(); },
     actionableReminders(){ return this.reminders.filter(r => r.status === 'pending' && r.reminderDate <= this.today); },
     hasReminders()       { return this.reminders.length > 0; },
-    outcomeOptions()     { return CONTACT_OUTCOMES; }
+    outcomeOptions()     { return CONTACT_OUTCOMES; },
+    isSuperUser()        { return this.$root.role === 'superuser'; }
   },
   methods: {
     async load() {
@@ -932,6 +989,13 @@ const FollowupDetail = {
     reminderLabel(r) {
       if (r.daysBeforeDue === 1) return '1 day before';
       return r.daysBeforeDue + ' days before';
+    },
+    async deleteCase() {
+      const reason = prompt('Reason for deleting this follow-up case:');
+      if (!reason) return;
+      if (!confirm('Delete this case and all its reminders and contact logs permanently?')) return;
+      try { await deleteFollowupCase(this.fc, reason); this.$router.push('/followups'); }
+      catch(e) { alert('Error: ' + e.message); }
     }
   },
   mounted() { this.load(); },
@@ -1331,142 +1395,7 @@ const Config = {
 // ================================================================
 //  STEP 12: ANALYTICS / REPORTS SCREEN
 // ================================================================
-
-const Analytics = {
-  name: 'Analytics',
-  data() {
-    return {
-      period: 30,
-      summary: null, modeData: null, trendData: [], followupStats: null,
-      loading: true
-    };
-  },
-  computed: {
-    hasModeData() {
-      return this.modeData && Object.values(this.modeData).some(v => v > 0);
-    }
-  },
-  methods: {
-    async loadData() {
-      this.loading = true;
-      if (this._chartRevenue) { this._chartRevenue.destroy(); this._chartRevenue = null; }
-      if (this._chartMode)    { this._chartMode.destroy();    this._chartMode    = null; }
-      try {
-        const [summary, modeData, trendData, followupStats] = await Promise.all([
-          getRevenueSummary(), getRevenueByMode(this.period),
-          getDailyRevenueTrend(this.period), getFollowupStats()
-        ]);
-        this.summary = summary; this.modeData = modeData;
-        this.trendData = trendData; this.followupStats = followupStats;
-        this.$nextTick(() => { this.initCharts(); });
-      } finally { this.loading = false; }
-    },
-    initCharts() {
-      const ctx1 = this.$refs.chartRevenue;
-      if (ctx1 && this.trendData.length) {
-        this._chartRevenue = new Chart(ctx1, {
-          type: 'line',
-          data: {
-            labels: this.trendData.map(d => {
-              const [y,m,dy] = d.date.split('-').map(Number);
-              return new Date(y,m-1,dy).toLocaleDateString('en-IN',{day:'numeric',month:'short'});
-            }),
-            datasets: [{ label: 'Revenue', data: this.trendData.map(d=>d.amount),
-              borderColor: '#0F6E56', backgroundColor: 'rgba(15,110,86,0.08)',
-              fill: true, tension: 0.4, pointRadius: 3, pointHoverRadius: 5 }]
-          },
-          options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-              y: { beginAtZero: true, ticks: { callback: v => '₹'+v.toLocaleString('en-IN') } },
-              x: { ticks: { maxTicksLimit: 10, maxRotation: 0 } }
-            }
-          }
-        });
-      }
-      const ctx2 = this.$refs.chartMode;
-      if (ctx2 && this.hasModeData) {
-        this._chartMode = new Chart(ctx2, {
-          type: 'doughnut',
-          data: {
-            labels: ['Cash','UPI','Card / POS','Bank Transfer'],
-            datasets: [{ data: [this.modeData.cash,this.modeData.upi,this.modeData.card,this.modeData.bank_transfer],
-              backgroundColor: ['#0F6E56','#185FA5','#666','#BA7517'],
-              borderWidth: 2, borderColor: '#fff' }]
-          },
-          options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { position:'bottom', labels:{ font:{size:12}, padding:12 } } }
-          }
-        });
-      }
-    },
-    setPeriod(p) { this.period=p; this.loadData(); },
-    fmtAmt(n) { return fmtAmount(n); }
-  },
-  mounted() { this.loadData(); },
-  beforeUnmount() {
-    if (this._chartRevenue) this._chartRevenue.destroy();
-    if (this._chartMode)    this._chartMode.destroy();
-  },
-  template: `
-    <div class="screen">
-      <div class="topbar"><div class="topbar-left"><h1>Reports</h1></div></div>
-      <div class="content">
-        <div class="loading-wrap" v-if="loading"><i class="ti ti-loader spin"></i> Loading…</div>
-        <template v-else>
-          <div class="analytics-grid" v-if="summary">
-            <div class="analytics-card analytics-teal"><div class="analytics-label">Today</div><div class="analytics-value">{{ fmtAmt(summary.todayTotal) }}</div></div>
-            <div class="analytics-card"><div class="analytics-label">This week</div><div class="analytics-value">{{ fmtAmt(summary.weekTotal) }}</div></div>
-            <div class="analytics-card"><div class="analytics-label">This month</div><div class="analytics-value">{{ fmtAmt(summary.monthTotal) }}</div></div>
-            <div class="analytics-card"><div class="analytics-label">Total invoices</div><div class="analytics-value">{{ summary.invoiceCount }}</div><div class="analytics-sub">Avg {{ fmtAmt(summary.avgInvoice) }} each</div></div>
-          </div>
-          <div class="period-selector">
-            <button class="period-btn" :class="{on:period===7}"  @click="setPeriod(7)">7 days</button>
-            <button class="period-btn" :class="{on:period===30}" @click="setPeriod(30)">30 days</button>
-            <button class="period-btn" :class="{on:period===90}" @click="setPeriod(90)">90 days</button>
-          </div>
-          <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px">
-            <div class="chart-card">
-              <div class="chart-title">Revenue trend</div>
-              <div class="chart-wrap"><canvas ref="chartRevenue"></canvas></div>
-            </div>
-            <div class="chart-card">
-              <div class="chart-title">Collections by mode</div>
-              <div class="chart-wrap" v-if="hasModeData"><canvas ref="chartMode"></canvas></div>
-              <div class="empty-section" v-else style="padding:40px 0"><i class="ti ti-chart-pie"></i><p>No data yet</p></div>
-            </div>
-          </div>
-          <div class="chart-card" v-if="followupStats">
-            <div class="chart-title">Follow-up compliance</div>
-            <div class="compliance-row"><span>Total cases</span><strong>{{ followupStats.total }}</strong></div>
-            <div class="compliance-row">
-              <div style="flex:1">
-                <div style="color:var(--teal-mid);font-weight:500">Completed — {{ followupStats.complianceRate }}%</div>
-                <div class="compliance-bar-bg"><div class="compliance-bar" :style="{width:followupStats.complianceRate+'%',background:'var(--teal-mid)'}"></div></div>
-              </div>
-              <strong style="color:var(--teal-mid);margin-left:16px">{{ followupStats.completed }}</strong>
-            </div>
-            <div class="compliance-row">
-              <div style="flex:1">
-                <div style="color:var(--amber-mid);font-weight:500">Overdue — {{ followupStats.overdueRate }}% of active</div>
-                <div class="compliance-bar-bg"><div class="compliance-bar" :style="{width:followupStats.overdueRate+'%',background:'var(--amber-mid)'}"></div></div>
-              </div>
-              <strong style="color:var(--amber-mid);margin-left:16px">{{ followupStats.overdue }}</strong>
-            </div>
-            <div class="compliance-row"><span>Active (on track)</span><span>{{ followupStats.active - followupStats.overdue }}</span></div>
-            <div class="compliance-row"><span style="color:var(--text-muted)">Declined</span><span style="color:var(--text-muted)">{{ followupStats.declined }}</span></div>
-          </div>
-        </template>
-      </div>
-    </div>
-  `
-};
-
-
-// ================================================================
-//  APPOINTMENTS — DAY VIEW
+//  DASHBOARD — tile home screen
 // ================================================================
 
 const Appointments = {
@@ -2747,7 +2676,14 @@ const InvoiceDetail = {
     fmtDate(d)     { return fmtDateShort(d); },
     modeLabel(m)   { return PAYMENT_MODE_LABELS[m]||m||'\u2014'; },
     typeLabel(t)   { return INVOICE_TYPE_LABELS[t]||t||'\u2014'; },
-    fmtTs(ts)      { if(!ts||!ts.toDate) return '\u2014'; return ts.toDate().toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }
+    fmtTs(ts)      { if(!ts||!ts.toDate) return '\u2014'; return ts.toDate().toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); },
+    async deleteInvoice() {
+      const reason = prompt('Reason for deleting invoice ' + (this.invoice ? this.invoice.invoiceNumber : '') + ':');
+      if (!reason) return;
+      if (!confirm('Permanently delete this invoice? Cannot be undone.')) return;
+      try { await hardDeleteInvoice(this.invoice, reason); this.$router.push('/billing'); }
+      catch(e) { alert('Error: ' + e.message); }
+    }
   },
   mounted() { this.load(); },
   template: `
@@ -2763,6 +2699,7 @@ const InvoiceDetail = {
         <div class="topbar-right" v-if="invoice">
           <button class="btn btn-secondary" @click="print"><i class="ti ti-printer"></i> Print</button>
           <button class="btn btn-secondary" @click="startEdit" v-if="!editing"><i class="ti ti-edit"></i> Edit invoice</button>
+          <button class="btn" style="background:var(--red-mid);color:white;border:none" v-if="$root.role==='superuser'" @click="deleteInvoice()"><i class="ti ti-trash"></i> Delete</button>
         </div>
       </div>
       <div class="content">
@@ -2989,12 +2926,66 @@ const Reconciliation = {
 //  ROUTER
 // ================================================================
 
+// ================================================================
+//  AUDIT LOG SCREEN (superuser only)
+// ================================================================
+
+const AuditLog = {
+  name: 'AuditLog',
+  data() { return { log: [], loading: true }; },
+  methods: {
+    async load() {
+      this.loading = true;
+      try { this.log = await getAuditLog(100); }
+      catch(e) { console.error(e); }
+      finally { this.loading = false; }
+    },
+    fmtTs(ts) {
+      if (!ts || !ts.toDate) return '\u2014';
+      return ts.toDate().toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    }
+  },
+  mounted() { this.load(); },
+  template: `
+    <div class="screen">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="topbar-breadcrumb">
+            <button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-arrow-left"></i> Home</button>
+            <span class="sep">/</span><span class="current">Audit log</span>
+          </div>
+        </div>
+      </div>
+      <div class="content">
+        <div class="loading-wrap" v-if="loading"><i class="ti ti-loader spin"></i> Loading\u2026</div>
+        <div class="empty-section" v-else-if="log.length===0">
+          <i class="ti ti-clipboard-check"></i><p>No deletions recorded yet</p>
+        </div>
+        <div class="section-card" v-else>
+          <div class="audit-row" v-for="entry in log" :key="entry.id">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="audit-entity">{{ entry.entity }}</span>
+              <span class="td-mono" style="font-size:12px">{{ entry.entityId }}</span>
+              <span class="pill pill-red" style="font-size:10px">Deleted</span>
+            </div>
+            <div class="audit-meta">{{ fmtTs(entry.deletedAt) }} \u00b7 by {{ entry.deletedBy }}</div>
+            <div class="audit-reason">Reason: {{ entry.reason }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `
+};
+
+
 const router = VueRouter.createRouter({
   history: VueRouter.createWebHashHistory(),
   routes: [
     { path:'/',                   redirect:'/dashboard' },
     { path:'/dashboard',          component:Dashboard },
+    { path:'/appointments',        component:Appointments },
     { path:'/appointments/new',   component:NewAppointment },
+    { path:'/audit-log',          component:AuditLog },
     { path:'/patients',           component:PatientSearch },
     { path:'/patients/new',       component:NewPatient },
     { path:'/patients/:id',       component:PatientProfile },
@@ -3031,21 +3022,12 @@ const App = {
   components: { Login },
   data() { return { user:null, role:null, userName:null, authChecked:false, whitelistError:false }; },
   computed: {
-    section() {
-      const p=this.$route.path;
-      if (p.startsWith('/patients'))       return 'patients';
-      if (p.startsWith('/followups'))      return 'followups';
-      if (p.startsWith('/billing'))        return 'billing';
-      if (p.startsWith('/reconciliation')) return 'reconciliation';
-      if (p.startsWith('/analytics'))      return 'analytics';
-      if (p.startsWith('/config'))         return 'config';
-      if (p.startsWith('/dashboard'))      return 'dashboard';
-      return 'dashboard';
-    },
     userInitials() {
-      if (!this.user||!this.user.displayName) return '?';
-      return this.user.displayName.trim().split(/\s+/).slice(0,2).map(n=>n[0].toUpperCase()).join('');
-    }
+      const n = this.userName || (this.user && this.user.displayName) || '?';
+      return n.trim().split(/\s+/).slice(0,2).map(x=>x[0].toUpperCase()).join('');
+    },
+    isDoctor()  { return this.role==='doctor' || this.role==='superuser'; },
+    isSuper()   { return this.role==='superuser'; }
   },
   methods: { async signOut() { await signOutUser(); } },
   mounted() {
@@ -3071,32 +3053,29 @@ const App = {
     });
   },
   template: `
-    <div>
+    <div class="app-shell">
       <div class="auth-loading" v-if="!authChecked"><i class="ti ti-loader spin" style="font-size:28px;color:var(--teal-mid)"></i></div>
       <Login v-else-if="!user" :whitelist-error="whitelistError" />
-      <div class="layout" v-else>
-        <aside class="sidebar">
-          <div class="sidebar-logo"><span class="sidebar-name">Aangan Clinic</span><span class="sidebar-sub">Women\u2019s health centre</span></div>
-          <nav class="sidebar-nav">
-            <button class="nav-btn" :class="{on:section==='dashboard'}"      @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Dashboard</button>
-            <button class="nav-btn" :class="{on:section==='followups'}"      @click="$router.push('/followups')"><i class="ti ti-calendar-check"></i> Follow-ups</button>
-            <button class="nav-btn" :class="{on:section==='patients'}"       @click="$router.push('/patients')"><i class="ti ti-users"></i> Patients</button>
-            <button class="nav-btn" :class="{on:section==='billing'}"        @click="$router.push('/billing')"><i class="ti ti-receipt"></i> Billing</button>
-            <button class="nav-btn" v-if="role==='doctor'" :class="{on:section==='reconciliation'}" @click="$router.push('/reconciliation')"><i class="ti ti-chart-bar"></i> Reconciliation</button>
-            <button class="nav-btn" v-if="role==='doctor'" :class="{on:section==='analytics'}"      @click="$router.push('/analytics')"><i class="ti ti-chart-line"></i> Reports</button>
-            <button class="nav-btn" v-if="role==='doctor'" :class="{on:section==='config'}"         @click="$router.push('/config')"><i class="ti ti-settings"></i> Settings</button>
-          </nav>
-          <div class="sidebar-footer">
-            <div class="sidebar-user">
-              <img v-if="user.photoURL" :src="user.photoURL" class="sidebar-user-avatar" referrerpolicy="no-referrer" />
-              <div class="sidebar-user-avatar-placeholder" v-else>{{ userInitials }}</div>
-              <div style="min-width:0"><div class="sidebar-user-name">{{ userName||user.displayName||'Staff' }}</div><div class="sidebar-user-email">{{ user.email }}</div><div class="sidebar-user-role">{{ role==='doctor'?'Doctor':'Staff' }}</div></div>
-            </div>
-            <button class="sign-out-btn" @click="signOut"><i class="ti ti-logout"></i> Sign out</button>
+      <template v-else>
+        <div class="app-topbar">
+          <div class="app-brand" @click="$router.push('/dashboard')">
+            <div class="app-brand-mark">A</div>
+            <div><div class="app-brand-name">Aangan Clinic</div><div class="app-brand-sub">Women’s health centre</div></div>
           </div>
-        </aside>
-        <main class="main-area"><router-view></router-view></main>
-      </div>
+          <div class="topbar-right-area">
+            <span class="role-badge" :class="'role-'+(role||'staff')">{{ role==='superuser'?'Superuser':role==='doctor'?'Doctor':'Staff' }}</span>
+            <div class="topbar-user-chip">
+              <img v-if="user.photoURL" :src="user.photoURL" class="topbar-ava" referrerpolicy="no-referrer" style="border-radius:50%;width:30px;height:30px;object-fit:cover" />
+              <div v-else class="topbar-ava" :style="'background:var(--teal-mid)'">{{ userInitials }}</div>
+              <div><div class="topbar-user-name">{{ userName||user.displayName||'Staff' }}</div></div>
+            </div>
+            <button class="topbar-signout" @click="signOut">Sign out</button>
+          </div>
+        </div>
+        <div class="app-body">
+          <router-view />
+        </div>
+      </template>
     </div>
   `
 };

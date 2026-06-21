@@ -374,3 +374,20 @@ async function getEffectiveVaccineSchedule() {
   } catch(e) { /* fall through */ }
   return IAP_VACCINES;
 }
+
+// ----------------------------------------------------------------
+//  DELETE FOLLOW-UP CASE  (superuser)
+// ----------------------------------------------------------------
+
+async function deleteFollowupCase(fc, reason) {
+  await writeAuditLog('followupCase', fc.id, fc, reason);
+  const [tasks, logs] = await Promise.all([
+    db.collection('reminderTasks').where('followupCaseId','==',fc.id).get(),
+    db.collection('contactLogs').where('followupCaseId','==',fc.id).get()
+  ]);
+  const batch = db.batch();
+  tasks.docs.forEach(d => batch.delete(d.ref));
+  logs.docs.forEach(d  => batch.delete(d.ref));
+  batch.delete(db.collection('followupCases').doc(fc.id));
+  await batch.commit();
+}

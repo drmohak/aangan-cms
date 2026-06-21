@@ -162,3 +162,50 @@ async function getChildrenByMother(motherId) {
     .get();
   return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
+
+// ----------------------------------------------------------------
+//  ARCHIVE / RESTORE / DELETE  (Step 13+)
+// ----------------------------------------------------------------
+
+async function archivePatient(patientId) {
+  await db.collection('patients').doc(patientId).update({
+    archived:   true,
+    archivedAt: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+async function restorePatient(patientId) {
+  await db.collection('patients').doc(patientId).update({ archived: false, archivedAt: null });
+}
+
+async function getPatientLinkedCount(patientId) {
+  const [fup, inv, enc, ch] = await Promise.all([
+    db.collection('followupCases').where('patientDocId','==',patientId).get(),
+    db.collection('invoices').where('patientId','==',patientId).get(),
+    db.collection('encounters').where('patientDocId','==',patientId).get(),
+    db.collection('patients').where('motherId','==',patientId).get()
+  ]);
+  return { followups:fup.size, invoices:inv.size, encounters:enc.size, children:ch.size,
+           total: fup.size+inv.size+enc.size+ch.size };
+}
+
+async function hardDeletePatient(patient, reason) {
+  // 1. Audit snapshot first — before anything is touched
+  await writeAuditLog('patient', patient.id || patient.patientId, patient, reason);
+
+  // 2. Gather all linked docs
+  const [fup, inv, enc, ch, rem, clog] = await Promise.all([
+    db.collection('followupCases').where('patientDocId','==',patient.id).get(),
+    db.collection('invoices').where('patientId','==',patient.id).get(),
+    db.collection('encounters').where('patientDocId','==',patient.id).get(),
+    db.collection('patients').where('motherId','==',patient.id).get(),
+    db.collection('reminderTasks').where('patientDocId','==',patient.id).get(),
+    db.collection('contactLogs').where('patientDocId','==',patient.id).get()
+  ]);
+
+  // 3. Batch delete everything
+  const batch = db.batch();
+  [fup, inv, enc, ch, rem, clog].forEach(snap => snap.docs.forEach(d => batch.delete(d.ref)));
+  batch.delete(db.collection('patients').doc(patient.id));
+  await batch.commit();
+}

@@ -137,3 +137,27 @@ async function toggleUserActive(email, isActive) {
 async function removeUser(email) {
   await db.collection('users').doc(email.toLowerCase()).delete();
 }
+
+// ----------------------------------------------------------------
+//  AUDIT LOG  (write-only from app — never deleteable)
+// ----------------------------------------------------------------
+
+async function writeAuditLog(entity, entityId, entityData, reason) {
+  await db.collection('auditLog').add({
+    action:     'delete',
+    entity,
+    entityId,
+    entityData: JSON.parse(JSON.stringify(entityData)), // plain object snapshot
+    reason:     (reason || '').trim(),
+    deletedBy:  (firebase.auth().currentUser || {}).email || 'unknown',
+    deletedAt:  firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+async function getAuditLog(limitN) {
+  const snap = await db.collection('auditLog')
+    .orderBy('deletedAt', 'desc')
+    .limit(limitN || 100)
+    .get();
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
