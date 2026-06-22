@@ -3119,25 +3119,27 @@ const App = {
     <div>
       <div class="auth-loading" v-if="!authChecked"><i class="ti ti-loader spin" style="font-size:28px;color:var(--teal-mid)"></i></div>
       <Login v-else-if="!user" :whitelist-error="whitelistError" />
-      <div class="layout" style="flex-direction:column" v-else>
-        <div class="cms-topbar">
-          <div class="cms-brand" @click="$router.push('/dashboard')">
-            <div class="cms-brand-mark">A</div>
-            <div class="cms-brand-name">Aangan Clinic</div>
-          </div>
-          <div class="cms-topbar-right">
-            <span class="role-badge" :class="'role-'+(role||'staff')">{{ role==='superuser'?'Superuser':role==='doctor'?'Doctor':'Staff' }}</span>
-            <button class="cms-home-btn" @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Home</button>
-            <div class="cms-user">
-              <img v-if="user.photoURL" :src="user.photoURL" class="cms-ava" referrerpolicy="no-referrer" />
-              <div v-else class="cms-ava">{{ userInitials }}</div>
-              <span class="cms-uname">{{ userName||user.displayName||'Staff' }}</span>
-            </div>
-            <button class="cms-signout" @click="signOut">Sign out</button>
-          </div>
-        </div>
+      <div class="layout" v-else>
         <div class="main-area">
-          <router-view />
+          <div class="cms-topbar">
+            <div class="cms-brand" @click="$router.push('/dashboard')">
+              <div class="cms-brand-mark">A</div>
+              <div class="cms-brand-name">Aangan Clinic</div>
+            </div>
+            <div class="cms-topbar-right">
+              <span class="role-badge" :class="'role-'+(role||'staff')">{{ role==='superuser'?'Superuser':role==='doctor'?'Doctor':'Staff' }}</span>
+              <button class="cms-home-btn" @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Home</button>
+              <div class="cms-user">
+                <img v-if="user.photoURL" :src="user.photoURL" class="cms-ava" referrerpolicy="no-referrer" />
+                <div v-else class="cms-ava">{{ userInitials }}</div>
+                <span class="cms-uname">{{ userName||user.displayName||'Staff' }}</span>
+              </div>
+              <button class="cms-signout" @click="signOut">Sign out</button>
+            </div>
+          </div>
+          <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column">
+            <router-view />
+          </div>
         </div>
       </div>
     </div>
