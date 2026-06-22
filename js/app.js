@@ -1821,7 +1821,7 @@ const Dashboard = {
   },
   mounted() { this.loadAll(); },
   template: `
-    <div class="home-screen">
+    <div class="home-screen" style="height:100%;overflow-y:auto">
 
       <div class="home-hi">{{ greeting }}, {{ firstName }}</div>
       <div class="home-date">{{ todayLabel }}</div>
@@ -3112,29 +3112,32 @@ const App = {
     });
   },
   template: `
-    <div class="app-shell">
+    <div>
       <div class="auth-loading" v-if="!authChecked"><i class="ti ti-loader spin" style="font-size:28px;color:var(--teal-mid)"></i></div>
       <Login v-else-if="!user" :whitelist-error="whitelistError" />
-      <template v-else>
-        <div class="app-topbar">
-          <div class="app-brand" @click="$router.push('/dashboard')">
-            <div class="app-brand-mark">A</div>
-            <div><div class="app-brand-name">Aangan Clinic</div><div class="app-brand-sub">Women’s health centre</div></div>
-          </div>
-          <div class="topbar-right-area">
-            <span class="role-badge" :class="'role-'+(role||'staff')">{{ role==='superuser'?'Superuser':role==='doctor'?'Doctor':'Staff' }}</span>
-            <div class="topbar-user-chip">
-              <img v-if="user.photoURL" :src="user.photoURL" class="topbar-ava" referrerpolicy="no-referrer" style="border-radius:50%;width:30px;height:30px;object-fit:cover" />
-              <div v-else class="topbar-ava" :style="'background:var(--teal-mid)'">{{ userInitials }}</div>
-              <div><div class="topbar-user-name">{{ userName||user.displayName||'Staff' }}</div></div>
+      <div class="layout" v-else>
+        <div class="main-area">
+          <div class="cms-topbar">
+            <div class="cms-brand" @click="$router.push('/dashboard')">
+              <div class="cms-brand-mark">A</div>
+              <div class="cms-brand-name">Aangan Clinic</div>
             </div>
-            <button class="topbar-signout" @click="signOut">Sign out</button>
+            <div class="cms-topbar-right">
+              <span class="role-badge" :class="'role-'+(role||'staff')">{{ role==='superuser'?'Superuser':role==='doctor'?'Doctor':'Staff' }}</span>
+              <button class="cms-home-btn" @click="$router.push('/dashboard')" title="Home"><i class="ti ti-home"></i> Home</button>
+              <div class="cms-user">
+                <img v-if="user.photoURL" :src="user.photoURL" class="cms-ava" referrerpolicy="no-referrer" />
+                <div v-else class="cms-ava">{{ userInitials }}</div>
+                <span class="cms-uname">{{ userName||user.displayName||'Staff' }}</span>
+              </div>
+              <button class="cms-signout" @click="signOut">Sign out</button>
+            </div>
+          </div>
+          <div class="cms-view">
+            <router-view />
           </div>
         </div>
-        <div class="app-body">
-          <router-view />
-        </div>
-      </template>
+      </div>
     </div>
   `
 };
