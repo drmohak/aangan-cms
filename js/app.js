@@ -404,6 +404,20 @@ const PatientProfile = {
       this._linkedCount = await getPatientLinkedCount(this.patient.id);
       this._deleteReason = ''; this._deleteConfirm = '';
       this._showDeleteModal = true;
+    },
+    async _confirmDelete() {
+      if (this._deleteConfirm.trim().toLowerCase() !== (this.patient ? this.patient.name.toLowerCase() : '')) {
+        alert('Name does not match. Please type the patient name exactly.');
+        return;
+      }
+      if (!this._deleteReason.trim()) { alert('Please enter a reason.'); return; }
+      this._deleting = true;
+      try {
+        await hardDeletePatient(this.patient, this._deleteReason);
+        this._showDeleteModal = false;
+        this.$router.push('/patients');
+      } catch(e) { alert('Error: ' + e.message); }
+      finally { this._deleting = false; }
     }
   },
   mounted() { this.loadPatient(); },
@@ -581,7 +595,7 @@ const PatientProfile = {
             <button class="btn btn-secondary" @click="_showDeleteModal=false">Cancel</button>
             <button class="btn" style="background:var(--red-mid);color:white;border-color:var(--red-mid)"
               :disabled="_deleting||!_deleteReason.trim()||_deleteConfirm.trim().toLowerCase()!==(patient?patient.name.toLowerCase():'')"
-              @click="(async()=>{ _deleting=true; try{ await hardDeletePatient(patient,_deleteReason); _showDeleteModal=false; $router.push('/patients'); }catch(e){alert(e.message);}finally{_deleting=false;} })()">
+              @click="_confirmDelete()">
               {{ _deleting ? 'Deleting\u2026' : 'Delete permanently' }}
             </button>
           </div>
