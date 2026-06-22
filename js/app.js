@@ -1401,6 +1401,8 @@ const Config = {
             <div class="form-actions"><button class="btn btn-primary" @click="saveReminderSchedules" :disabled="savingReminder"><i class="ti ti-check"></i> {{ savingReminder ? 'Saving…' : 'Save schedules' }}</button></div>
           </div>
         </template>
+        </div>
+        </div>
       </div>
     </div>
   `
@@ -1821,13 +1823,15 @@ const Dashboard = {
   },
   mounted() { this.loadAll(); },
   template: `
-    <div class="home-screen" style="height:100%;overflow-y:auto">
+    <div class="screen">
+      <div class="content" style="overflow-y:auto">
+        <div style="max-width:1060px;margin:0 auto">
 
-      <div class="home-hi">{{ greeting }}, {{ firstName }}</div>
-      <div class="home-date">{{ todayLabel }}</div>
+        <div class="home-hi">{{ greeting }}, {{ firstName }}</div>
+        <div class="home-date">{{ todayLabel }}</div>
 
-      <!-- Quick actions -->
-      <div class="home-actions">
+        <!-- Quick actions -->
+        <div class="home-actions">
         <button class="home-action ha-primary" @click="go('/appointments/new')"><i class="ti ti-calendar-plus"></i> Book appointment</button>
         <button class="home-action" @click="go('/patients/new')"><i class="ti ti-user-plus"></i> New patient</button>
         <button class="home-action" @click="go('/followups/new')"><i class="ti ti-calendar-check"></i> New follow-up</button>
@@ -3115,27 +3119,25 @@ const App = {
     <div>
       <div class="auth-loading" v-if="!authChecked"><i class="ti ti-loader spin" style="font-size:28px;color:var(--teal-mid)"></i></div>
       <Login v-else-if="!user" :whitelist-error="whitelistError" />
-      <div class="layout" v-else>
+      <div class="layout" style="flex-direction:column" v-else>
+        <div class="cms-topbar">
+          <div class="cms-brand" @click="$router.push('/dashboard')">
+            <div class="cms-brand-mark">A</div>
+            <div class="cms-brand-name">Aangan Clinic</div>
+          </div>
+          <div class="cms-topbar-right">
+            <span class="role-badge" :class="'role-'+(role||'staff')">{{ role==='superuser'?'Superuser':role==='doctor'?'Doctor':'Staff' }}</span>
+            <button class="cms-home-btn" @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Home</button>
+            <div class="cms-user">
+              <img v-if="user.photoURL" :src="user.photoURL" class="cms-ava" referrerpolicy="no-referrer" />
+              <div v-else class="cms-ava">{{ userInitials }}</div>
+              <span class="cms-uname">{{ userName||user.displayName||'Staff' }}</span>
+            </div>
+            <button class="cms-signout" @click="signOut">Sign out</button>
+          </div>
+        </div>
         <div class="main-area">
-          <div class="cms-topbar">
-            <div class="cms-brand" @click="$router.push('/dashboard')">
-              <div class="cms-brand-mark">A</div>
-              <div class="cms-brand-name">Aangan Clinic</div>
-            </div>
-            <div class="cms-topbar-right">
-              <span class="role-badge" :class="'role-'+(role||'staff')">{{ role==='superuser'?'Superuser':role==='doctor'?'Doctor':'Staff' }}</span>
-              <button class="cms-home-btn" @click="$router.push('/dashboard')" title="Home"><i class="ti ti-home"></i> Home</button>
-              <div class="cms-user">
-                <img v-if="user.photoURL" :src="user.photoURL" class="cms-ava" referrerpolicy="no-referrer" />
-                <div v-else class="cms-ava">{{ userInitials }}</div>
-                <span class="cms-uname">{{ userName||user.displayName||'Staff' }}</span>
-              </div>
-              <button class="cms-signout" @click="signOut">Sign out</button>
-            </div>
-          </div>
-          <div class="cms-view">
-            <router-view />
-          </div>
+          <router-view />
         </div>
       </div>
     </div>
