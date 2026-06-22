@@ -1401,8 +1401,6 @@ const Config = {
             <div class="form-actions"><button class="btn btn-primary" @click="saveReminderSchedules" :disabled="savingReminder"><i class="ti ti-check"></i> {{ savingReminder ? 'Saving…' : 'Save schedules' }}</button></div>
           </div>
         </template>
-        </div>
-        </div>
       </div>
     </div>
   `
