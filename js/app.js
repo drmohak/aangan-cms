@@ -2627,7 +2627,18 @@ const InvoiceDetail = {
     fmtDate(d)     { return fmtDateShort(d); },
     modeLabel(m)   { return PAYMENT_MODE_LABELS[m]||m||'\u2014'; },
     typeLabel(t)   { return INVOICE_TYPE_LABELS[t]||t||'\u2014'; },
-    fmtTs(ts)      { if(!ts||!ts.toDate) return '\u2014'; return ts.toDate().toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }
+    fmtTs(ts)      { if(!ts||!ts.toDate) return '\u2014'; return ts.toDate().toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); },
+    isSuperUser() { return this.$root.role === 'superuser'; },
+    async confirmDeleteInvoice() {
+      const reason = prompt('Reason for deleting ' + (this.invoice ? this.invoice.invoiceNumber : 'this invoice') + ':');
+      if (!reason || !reason.trim()) return;
+      if (!confirm('Permanently delete this invoice? This cannot be undone.')) return;
+      try {
+        const user = this.$root.user;
+        await hardDeleteInvoice(this.invoice, reason, user ? user.email : 'unknown');
+        this.$router.push('/billing');
+      } catch(e) { alert('Error: ' + e.message); }
+    }
   },
   mounted() { this.load(); },
   template: `
@@ -2644,6 +2655,7 @@ const InvoiceDetail = {
         <div class="topbar-right" v-if="invoice">
           <button class="btn btn-secondary" @click="print"><i class="ti ti-printer"></i> Print</button>
           <button class="btn btn-secondary" @click="startEdit" v-if="!editing"><i class="ti ti-edit"></i> Edit invoice</button>
+          <button class="btn" style="background:#dc2626;color:white;border-color:#dc2626" v-if="isSuperUser() && !editing" @click="confirmDeleteInvoice()"><i class="ti ti-trash"></i> Delete</button>
         </div>
       </div>
       <div class="content">
