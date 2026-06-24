@@ -120,7 +120,7 @@ const PatientSearch = {
   template: `
     <div class="screen">
       <div class="topbar">
-        <div class="topbar-left"><h1>Patients</h1></div>
+        <div class="topbar-left"><div class="topbar-breadcrumb"><button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Dashboard</button><span class="sep">/</span><span class="current">Patients</span></div></div>
         <div class="topbar-right"><button class="btn btn-primary" @click="$router.push('/patients/new')"><i class="ti ti-user-plus"></i> New patient</button></div>
       </div>
       <div class="content">
@@ -191,7 +191,8 @@ const NewPatient = {
   template: `
     <div class="screen">
       <div class="topbar">
-        <div class="topbar-left"><div class="topbar-breadcrumb"><button class="btn btn-secondary btn-sm" @click="$router.push('/patients')"><i class="ti ti-arrow-left"></i> Patients</button><span class="sep">/</span><span class="current">New patient</span></div></div>
+        <div class="topbar-left"><div class="topbar-breadcrumb"><button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-home"></i></button><span class="sep">/</span>
+            <button class="btn btn-secondary btn-sm" @click="$router.push('/patients')"><i class="ti ti-arrow-left"></i> Patients</button><span class="sep">/</span><span class="current">New patient</span></div></div>
       </div>
       <div class="content">
         <div class="form-card">
@@ -247,7 +248,8 @@ const PatientEdit = {
   mounted() { this.loadPatient(); },
   template: `
     <div class="screen">
-      <div class="topbar"><div class="topbar-left"><div class="topbar-breadcrumb"><button class="btn btn-secondary btn-sm" @click="$router.push('/patients/'+$route.params.id)"><i class="ti ti-arrow-left"></i> Patient</button><span class="sep">/</span><span class="current">Edit</span></div></div></div>
+      <div class="topbar"><div class="topbar-left"><div class="topbar-breadcrumb"><button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-home"></i></button><span class="sep">/</span>
+            <button class="btn btn-secondary btn-sm" @click="$router.push('/patients/'+$route.params.id)"><i class="ti ti-arrow-left"></i> Patient</button><span class="sep">/</span><span class="current">Edit</span></div></div></div>
       <div class="content">
         <div class="loading-wrap" v-if="loading"><i class="ti ti-loader spin"></i> Loading\u2026</div>
         <div class="form-card" v-else>
@@ -302,7 +304,8 @@ const ChildRegistration = {
   mounted() { this.loadMother(); },
   template: `
     <div class="screen">
-      <div class="topbar"><div class="topbar-left"><div class="topbar-breadcrumb"><button class="btn btn-secondary btn-sm" @click="$router.push('/patients/'+$route.params.id)"><i class="ti ti-arrow-left"></i> {{ mother?mother.name:'Patient' }}</button><span class="sep">/</span><span class="current">Register child</span></div></div></div>
+      <div class="topbar"><div class="topbar-left"><div class="topbar-breadcrumb"><button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-home"></i></button><span class="sep">/</span>
+            <button class="btn btn-secondary btn-sm" @click="$router.push('/patients/'+$route.params.id)"><i class="ti ti-arrow-left"></i> {{ mother?mother.name:'Patient' }}</button><span class="sep">/</span><span class="current">Register child</span></div></div></div>
       <div class="content">
         <div class="loading-wrap" v-if="loadingMother"><i class="ti ti-loader spin"></i> Loading\u2026</div>
         <div class="form-card" v-else>
@@ -417,6 +420,7 @@ const PatientProfile = {
       <div class="topbar">
         <div class="topbar-left">
           <div class="topbar-breadcrumb">
+            <button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-home"></i></button><span class="sep">/</span>
             <button class="btn btn-secondary btn-sm" @click="$router.push('/patients')"><i class="ti ti-arrow-left"></i> Patients</button>
             <span class="sep">/</span>
             <span class="current">{{ loading?'Loading\u2026':(patient?patient.name:'Not found') }}</span>
@@ -705,6 +709,7 @@ const FollowupCreation = {
       <div class="topbar">
         <div class="topbar-left">
           <div class="topbar-breadcrumb">
+            <button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-home"></i></button><span class="sep">/</span>
             <button class="btn btn-secondary btn-sm" @click="patient?$router.push('/patients/'+patient.id):$router.push('/patients')"><i class="ti ti-arrow-left"></i> {{ patient?patient.name:'Patients' }}</button>
             <span class="sep">/</span><span class="current">New follow-up</span>
           </div>
@@ -1000,6 +1005,7 @@ const FollowupDetail = {
       <div class="topbar">
         <div class="topbar-left">
           <div class="topbar-breadcrumb">
+            <button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-home"></i></button><span class="sep">/</span>
             <button class="btn btn-secondary btn-sm" @click="fc?$router.push('/patients/'+fc.patientDocId):$router.go(-1)">
               <i class="ti ti-arrow-left"></i> {{ fc?fc.patientName:'Back' }}
             </button>
@@ -1242,7 +1248,7 @@ const Config = {
   mounted() { this.loadServices(); },
   template: `
     <div class="screen">
-      <div class="topbar"><div class="topbar-left"><h1>Settings</h1></div></div>
+      <div class="topbar"><div class="topbar-left"><div class="topbar-breadcrumb"><button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Dashboard</button><span class="sep">/</span><span class="current">Settings</span></div></div></div>
       <div class="content">
         <div class="config-tab-bar">
           <button class="config-tab" :class="{on:tab==='services'}" @click="switchTab('services')"><i class="ti ti-list-check"></i> Services</button>
@@ -1475,7 +1481,7 @@ const Appointments = {
   template: `
     <div class="screen">
       <div class="topbar">
-        <div class="topbar-left"><h1>Appointments</h1></div>
+        <div class="topbar-left"><div class="topbar-breadcrumb"><button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Dashboard</button><span class="sep">/</span><span class="current">Appointments</span></div></div>
         <div class="topbar-right">
           <button class="btn btn-secondary btn-sm" @click="load" :disabled="loading"><i class="ti ti-refresh"></i> Refresh</button>
           <button class="btn btn-primary" @click="$router.push('/appointments/new')"><i class="ti ti-calendar-plus"></i> Book appointment</button>
@@ -1654,6 +1660,7 @@ const NewAppointment = {
       <div class="topbar">
         <div class="topbar-left">
           <div class="topbar-breadcrumb">
+            <button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-home"></i></button><span class="sep">/</span>
             <button class="btn btn-secondary btn-sm" @click="$router.push('/appointments')"><i class="ti ti-arrow-left"></i> Appointments</button>
             <span class="sep">/</span><span class="current">Book appointment</span>
           </div>
@@ -1824,27 +1831,27 @@ const Dashboard = {
           <div class="dash-date">{{ todayLabel }}</div>
         </div>
         <div class="dash-stats" v-if="stats || loading || !loadingAppts">
-          <div class="dash-stat teal">
+          <div class="dash-stat teal" @click="$router.push('/appointments')" style="cursor:pointer">
             <div class="dash-stat-label">Appointments today</div>
             <div class="dash-stat-value">{{ loadingAppts ? '\u2014' : todayAppts.filter(a=>a.status==='scheduled').length }}</div>
             <div class="dash-stat-sub">{{ loadingAppts ? '' : todayAppts.length + ' booked total' }}</div>
           </div>
-          <div class="dash-stat">
+          <div class="dash-stat" @click="$router.push('/followups')" style="cursor:pointer">
             <div class="dash-stat-label">Reminders today</div>
             <div class="dash-stat-value" style="font-size:22px">{{ loading ? '\u2014' : (stats ? stats.pendingToday : 0) }}</div>
             <div class="dash-stat-sub">Pending to send</div>
           </div>
-          <div class="dash-stat amber">
+          <div class="dash-stat amber" @click="$router.push('/followups')" style="cursor:pointer">
             <div class="dash-stat-label">Overdue cases</div>
             <div class="dash-stat-value">{{ loading ? '\u2014' : (stats ? stats.overdueCount : 0) }}</div>
             <div class="dash-stat-sub">Past due date</div>
           </div>
-          <div class="dash-stat blue">
+          <div class="dash-stat blue" @click="$router.push('/patients')" style="cursor:pointer">
             <div class="dash-stat-label">New this month</div>
             <div class="dash-stat-value">{{ loading ? '\u2014' : (stats ? stats.monthPatients : 0) }}</div>
             <div class="dash-stat-sub">Patients registered</div>
           </div>
-          <div class="dash-stat" v-if="role==='doctor'">
+          <div class="dash-stat" v-if="role==='doctor'" @click="$router.push('/billing')" style="cursor:pointer">
             <div class="dash-stat-label">Today\u2019s revenue</div>
             <div class="dash-stat-value" style="font-size:20px;color:var(--teal-mid)">{{ loading ? '\u2014' : fmtAmt(stats ? stats.todayRevenue : 0) }}</div>
             <div class="dash-stat-sub">{{ !loading && stats ? stats.todayInvoiceCount + ' invoice' + (stats.todayInvoiceCount===1?'':'s') : '' }}</div>
@@ -2019,7 +2026,7 @@ const FollowupList = {
     <div class="screen">
       <div class="topbar">
         <div class="topbar-left">
-          <h1>Follow-ups</h1>
+          <div class="topbar-breadcrumb"><button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Dashboard</button><span class="sep">/</span><span class="current">Follow-ups</span></div>
           <p v-if="view==='queue'">{{ todayLabel }}</p>
         </div>
         <div class="topbar-right">
@@ -2227,6 +2234,7 @@ const Encounter = {
       <div class="topbar">
         <div class="topbar-left">
           <div class="topbar-breadcrumb">
+            <button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-home"></i></button><span class="sep">/</span>
             <button class="btn btn-secondary btn-sm" @click="patient?$router.push('/patients/'+patient.id):$router.go(-1)">
               <i class="ti ti-arrow-left"></i> {{ patient?patient.name:'Back' }}
             </button>
@@ -2327,7 +2335,7 @@ const BillingList = {
   template: `
     <div class="screen">
       <div class="topbar">
-        <div class="topbar-left"><h1>Billing</h1></div>
+        <div class="topbar-left"><div class="topbar-breadcrumb"><button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Dashboard</button><span class="sep">/</span><span class="current">Billing</span></div></div>
         <div class="topbar-right">
           <button class="btn btn-primary" @click="$router.push('/billing/new')"><i class="ti ti-plus"></i> New invoice</button>
         </div>
@@ -2451,8 +2459,7 @@ const NewInvoice = {
     initials(n)   { return patientInitials(n); },
     avCls(n)      { return patientAvatarClass(n); }
   },
-  mounted() {
-    if (this.$route.query.patientId) this.loadPatient(this.$route.query.patientId);
+  mounted() { if (this.$route.query.patientId) this.loadPatient(this.$route.query.patientId);
     getActiveServices().then(s => { this.masterServices = s; }).catch(() => {});
   },
   template: `
@@ -2460,6 +2467,7 @@ const NewInvoice = {
       <div class="topbar">
         <div class="topbar-left">
           <div class="topbar-breadcrumb">
+            <button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-home"></i></button><span class="sep">/</span>
             <button class="btn btn-secondary btn-sm" @click="$router.push('/billing')"><i class="ti ti-arrow-left"></i> Billing</button>
             <span class="sep">/</span><span class="current">New invoice</span>
           </div>
@@ -2611,6 +2619,7 @@ const InvoiceDetail = {
       <div class="topbar">
         <div class="topbar-left">
           <div class="topbar-breadcrumb">
+            <button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-home"></i></button><span class="sep">/</span>
             <button class="btn btn-secondary btn-sm" @click="$router.push('/billing')"><i class="ti ti-arrow-left"></i> Billing</button>
             <span class="sep">/</span>
             <span class="current">{{ invoice ? invoice.invoiceNumber : 'Invoice' }}</span>
@@ -2785,7 +2794,7 @@ const Reconciliation = {
   mounted() { this.loadData(); },
   template: `
     <div class="screen">
-      <div class="topbar"><div class="topbar-left"><h1>Daily reconciliation</h1></div></div>
+      <div class="topbar"><div class="topbar-left"><div class="topbar-breadcrumb"><button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Dashboard</button><span class="sep">/</span><span class="current">Reconciliation</span></div></div></div>
       <div class="content">
         <div class="date-nav">
           <button class="date-nav-btn" @click="prevDay"><i class="ti ti-chevron-left"></i></button>
@@ -3025,7 +3034,7 @@ router.beforeEach((to, from, next) => {
 const App = {
   name: 'App',
   components: { Login },
-  data() { return { user:null, role:null, userName:null, authChecked:false, whitelistError:false }; },
+  data() { return { user:null, role:null, userName:null, authChecked:false, whitelistError:false, showProfileMenu:false }; },
   computed: {
     section() {
       const p=this.$route.path;
@@ -3045,6 +3054,7 @@ const App = {
     }
   },
   methods: { async signOut() { await signOutUser(); } },
+  watch: { '$route'() { this.showProfileMenu = false; } },
   mounted() {
     firebase.auth().onAuthStateChanged(async user => {
       if (user) {
@@ -3072,28 +3082,44 @@ const App = {
       <div class="auth-loading" v-if="!authChecked"><i class="ti ti-loader spin" style="font-size:28px;color:var(--teal-mid)"></i></div>
       <Login v-else-if="!user" :whitelist-error="whitelistError" />
       <div class="layout" v-else>
-        <aside class="sidebar">
-          <div class="sidebar-logo"><span class="sidebar-name">Aangan Clinic</span><span class="sidebar-sub">Women’s health centre</span></div>
-          <nav class="sidebar-nav">
-            <button class="nav-btn" :class="{on:section==='dashboard'}"      @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Dashboard</button>
-            <button class="nav-btn" :class="{on:section==='appointments'}"   @click="$router.push('/appointments')"><i class="ti ti-calendar"></i> Appointments</button>
-            <button class="nav-btn" :class="{on:section==='followups'}"      @click="$router.push('/followups')"><i class="ti ti-calendar-check"></i> Follow-ups</button>
-            <button class="nav-btn" :class="{on:section==='patients'}"       @click="$router.push('/patients')"><i class="ti ti-users"></i> Patients</button>
-            <button class="nav-btn" :class="{on:section==='billing'}"        @click="$router.push('/billing')"><i class="ti ti-receipt"></i> Billing</button>
-            <button class="nav-btn" v-if="role==='doctor'" :class="{on:section==='reconciliation'}" @click="$router.push('/reconciliation')"><i class="ti ti-chart-bar"></i> Reconciliation</button>
-            <button class="nav-btn" v-if="role==='doctor'" :class="{on:section==='analytics'}"      @click="$router.push('/analytics')"><i class="ti ti-chart-line"></i> Reports</button>
-            <button class="nav-btn" v-if="role==='doctor'" :class="{on:section==='config'}"         @click="$router.push('/config')"><i class="ti ti-settings"></i> Settings</button>
-          </nav>
-          <div class="sidebar-footer">
-            <div class="sidebar-user">
-              <img v-if="user.photoURL" :src="user.photoURL" class="sidebar-user-avatar" referrerpolicy="no-referrer" />
-              <div class="sidebar-user-avatar-placeholder" v-else>{{ userInitials }}</div>
-              <div style="min-width:0"><div class="sidebar-user-name">{{ userName||user.displayName||'Staff' }}</div><div class="sidebar-user-email">{{ user.email }}</div><div class="sidebar-user-role">{{ role==='doctor'?'Doctor':'Staff' }}</div></div>
+        <div class="main-area">
+
+          <!-- Persistent app topbar -->
+          <div class="app-topbar">
+            <div class="app-brand" @click="$router.push('/dashboard')" style="cursor:pointer">
+              <div class="app-brand-mark">A</div>
+              <span class="app-brand-name">Aangan Clinic</span>
             </div>
-            <button class="sign-out-btn" @click="signOut"><i class="ti ti-logout"></i> Sign out</button>
+            <div class="app-topbar-right">
+              <div class="profile-chip" @click.stop="showProfileMenu = !showProfileMenu">
+                <img v-if="user.photoURL" :src="user.photoURL" class="profile-ava" referrerpolicy="no-referrer" />
+                <div v-else class="profile-ava">{{ userInitials }}</div>
+                <span class="profile-chip-name">{{ userName||user.displayName||'Staff' }}</span>
+                <i class="ti ti-chevron-down" style="font-size:10px;color:var(--text-muted);margin-left:2px"></i>
+              </div>
+            </div>
           </div>
-        </aside>
-        <main class="main-area"><router-view></router-view></main>
+
+          <!-- Profile menu -->
+          <template v-if="showProfileMenu">
+            <div class="profile-overlay" @click="showProfileMenu=false"></div>
+            <div class="profile-menu">
+              <div class="profile-menu-header">
+                <div class="profile-menu-name">{{ userName||user.displayName||'Staff' }}</div>
+                <div class="profile-menu-email">{{ user.email }}</div>
+                <span class="role-badge" :class="'role-'+(role||'staff')" style="margin-top:4px">{{ role==='doctor'?'Doctor':'Staff' }}</span>
+              </div>
+              <div class="profile-menu-divider"></div>
+              <button class="profile-menu-item" v-if="role==='doctor'" @click="showProfileMenu=false; $router.push('/analytics')"><i class="ti ti-chart-line"></i> Reports</button>
+              <button class="profile-menu-item" v-if="role==='doctor'" @click="showProfileMenu=false; $router.push('/config')"><i class="ti ti-settings"></i> Settings</button>
+              <button class="profile-menu-item" v-if="role==='doctor'" @click="showProfileMenu=false; $router.push('/reconciliation')"><i class="ti ti-chart-bar"></i> Reconciliation</button>
+              <div class="profile-menu-divider" v-if="role==='doctor'"></div>
+              <button class="profile-menu-item red" @click="signOut"><i class="ti ti-logout"></i> Sign out</button>
+            </div>
+          </template>
+
+          <router-view></router-view>
+        </div>
       </div>
     </div>
   `
