@@ -162,3 +162,37 @@ async function getChildrenByMother(motherId) {
     .get();
   return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 }
+
+// ----------------------------------------------------------------
+//  HARD DELETE (superuser) — cascades to all linked records
+// ----------------------------------------------------------------
+
+async function hardDeletePatient(patient, reason, deletedBy) {
+  // Write audit record before touching anything
+  await db.collection('auditLog').add({
+    action:     'delete',
+    entity:     'patient',
+    entityId:   patient.id,
+    entityData: JSON.parse(JSON.stringify(patient)),
+    reason:     (reason || '').trim(),
+    deletedBy:  deletedBy || 'unknown',
+    deletedAt:  firebase.firestore.FieldValue.serverTimestamp()
+  });
+
+  // Gather every linked document
+  const [fup, inv, enc, ch, rem, clog] = await Promise.all([
+    db.collection('followupCases').where('patientDocId','==',patient.id).get(),
+    db.collection('invoices').where('patientId','==',patient.id).get(),
+    db.collection('encounters').where('patientDocId','==',patient.id).get(),
+    db.collection('patients').where('motherId','==',patient.id).get(),
+    db.collection('reminderTasks').where('patientDocId','==',patient.id).get(),
+    db.collection('contactLogs').where('patientDocId','==',patient.id).get()
+  ]);
+
+  const batch = db.batch();
+  [fup, inv, enc, ch, rem, clog].forEach(snap =>
+    snap.docs.forEach(d => batch.delete(d.ref))
+  );
+  batch.delete(db.collection('patients').doc(patient.id));
+  await batch.commit();
+}

@@ -1782,3 +1782,40 @@ button { font-family: inherit; cursor: pointer; }
   vertical-align: middle;
   margin-left: 4px;
 }
+
+/* ── Superuser delete strip ── */
+.dz-strip {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 22px; margin-top: 12px;
+  border-top: 1px solid var(--border);
+  background: #fff5f5;
+}
+.dz-delete-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 8px;
+  background: #fee2e2; color: #dc2626;
+  border: 1.5px solid #fca5a5;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+}
+.dz-delete-btn:hover { background: #fca5a5; }
+.dz-note { font-size: 11px; color: var(--text-muted); }
+
+/* ── Delete modal ── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,.48);
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-box {
+  background: white; border-radius: 16px; padding: 28px;
+  width: 480px; max-width: 92vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,.22);
+}
+.modal-title { font-size: 18px; font-weight: 800; color: var(--text-primary); margin-bottom: 8px; }
+.modal-body  { font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 14px; }
+.modal-warn  {
+  background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px;
+  padding: 10px 14px; font-size: 12px; color: #92400e; margin-bottom: 16px; line-height: 1.5;
+}
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }

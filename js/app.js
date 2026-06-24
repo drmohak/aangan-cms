@@ -331,7 +331,7 @@ const ChildRegistration = {
 
 const PatientProfile = {
   name: 'PatientProfile',
-  data() { return { patient:null, loading:true, loadError:null, children:[], mother:null, followups:[], encounters:[], showAllFollowups:false }; },
+  data() { return { patient:null, loading:true, loadError:null, children:[], mother:null, followups:[], encounters:[], showAllFollowups:false, showDeleteModal:false, deleteReason:'', deleteConfirmName:'', deleting:false, linkedCount:null }; },
   computed: {
     isChild()     { return this.patient&&this.patient.type==='child'; },
     initials()    { return this.patient?patientInitials(this.patient.name):'?'; },
@@ -388,7 +388,27 @@ const PatientProfile = {
     },
     ci(n)  { return patientInitials(n); },
     ca(n)  { return patientAvatarClass(n); },
-    fmtEncDate(d) { return fmtDateShort(d); }
+    fmtEncDate(d) { return fmtDateShort(d); },
+    isSuperUser() { return this.$root.role === 'superuser'; },
+    async loadLinkedCount() {
+      const [fup, inv, enc, ch] = await Promise.all([
+        db.collection('followupCases').where('patientDocId','==',this.patient.id).get(),
+        db.collection('invoices').where('patientId','==',this.patient.id).get(),
+        db.collection('encounters').where('patientDocId','==',this.patient.id).get(),
+        db.collection('patients').where('motherId','==',this.patient.id).get()
+      ]);
+      this.linkedCount = { followups:fup.size, invoices:inv.size, encounters:enc.size, children:ch.size, total:fup.size+inv.size+enc.size+ch.size };
+    },
+    async confirmDelete() {
+      this.deleting = true;
+      try {
+        const user = this.$root.user;
+        await hardDeletePatient(this.patient, this.deleteReason, user ? user.email : 'unknown');
+        this.showDeleteModal = false;
+        this.$router.push('/patients');
+      } catch(e) { alert('Error: ' + e.message); }
+      finally { this.deleting = false; }
+    }
   },
   mounted() { this.loadPatient(); },
   watch: { '$route.params.id'() { this.loadPatient(); } },
@@ -533,8 +553,46 @@ const PatientProfile = {
           </div>
         </template>
 
+        <!-- Superuser: delete patient -->
+        <div class="dz-strip" v-if="isSuperUser() && !loading && patient">
+          <button class="dz-delete-btn" @click="loadLinkedCount(); showDeleteModal = true">
+            <i class="ti ti-trash"></i> Delete patient permanently
+          </button>
+          <span class="dz-note">Superuser — cascades to all linked records</span>
+        </div>
+
       </div>
     </div>
+
+    <!-- Delete modal -->
+    <div class="modal-overlay" v-if="showDeleteModal" @click.self="showDeleteModal = false">
+      <div class="modal-box">
+        <div class="modal-title"><i class="ti ti-trash" style="color:#dc2626"></i> Delete patient permanently</div>
+        <div class="modal-body">All records for <strong>{{ patient ? patient.name : '' }}</strong> will be permanently erased.</div>
+        <div class="modal-warn" v-if="linkedCount && linkedCount.total > 0">
+          Will also delete: {{ linkedCount.followups }} follow-up{{ linkedCount.followups===1?'':'s' }},
+          {{ linkedCount.invoices }} invoice{{ linkedCount.invoices===1?'':'s' }},
+          {{ linkedCount.encounters }} encounter{{ linkedCount.encounters===1?'':'s' }},
+          {{ linkedCount.children }} child record{{ linkedCount.children===1?'':'s' }}
+          — <strong>{{ linkedCount.total }} records total.</strong>
+        </div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label class="form-label">Reason <span class="form-required">*</span></label>
+          <input type="text" v-model="deleteReason" class="form-input" placeholder="Why is this record being deleted?" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Type the patient name to confirm: <strong>{{ patient ? patient.name : '' }}</strong></label>
+          <input type="text" v-model="deleteConfirmName" class="form-input" />
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" @click="showDeleteModal = false">Cancel</button>
+          <button class="btn" style="background:#dc2626;color:white;border-color:#dc2626"
+            :disabled="deleting || !deleteReason.trim() || deleteConfirmName.trim().toLowerCase() !== (patient ? patient.name.toLowerCase() : 'x')"
+            @click="confirmDelete()">{{ deleting ? 'Deleting…' : 'Delete permanently' }}</button>
+        </div>
+      </div>
+    </div>
+
   `
 };
 
