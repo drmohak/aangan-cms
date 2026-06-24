@@ -114,12 +114,3 @@ async function getContactLogs(followupCaseId) {
     .map(doc => ({ id: doc.id, ...doc.data() }))
     .sort((a, b) => (b.contactedAt?.seconds || 0) - (a.contactedAt?.seconds || 0));
 }
-
-// ----------------------------------------------------------------
-//  DELETE ENCOUNTER  (superuser)
-// ----------------------------------------------------------------
-
-async function hardDeleteEncounter(encounter, reason) {
-  await writeAuditLog('encounter', encounter.id, encounter, reason);
-  await db.collection('encounters').doc(encounter.id).delete();
-}

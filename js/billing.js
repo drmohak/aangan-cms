@@ -244,12 +244,3 @@ async function getInvoiceEdits(invoiceId) {
     .map(d => ({ id: d.id, ...d.data() }))
     .sort((a, b) => (b.editedAt?.seconds || 0) - (a.editedAt?.seconds || 0));
 }
-
-// ----------------------------------------------------------------
-//  HARD DELETE INVOICE  (superuser)
-// ----------------------------------------------------------------
-
-async function hardDeleteInvoice(invoice, reason) {
-  await writeAuditLog('invoice', invoice.id, invoice, reason);
-  await db.collection('invoices').doc(invoice.id).delete();
-}

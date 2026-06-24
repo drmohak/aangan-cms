@@ -331,7 +331,7 @@ const ChildRegistration = {
 
 const PatientProfile = {
   name: 'PatientProfile',
-  data() { return { patient:null, loading:true, loadError:null, children:[], mother:null, followups:[], encounters:[], showAllFollowups:false, _showDeleteModal:false, _deleteReason:'', _deleteConfirm:'', _deleting:false, _linkedCount:null }; },
+  data() { return { patient:null, loading:true, loadError:null, children:[], mother:null, followups:[], encounters:[], showAllFollowups:false }; },
   computed: {
     isChild()     { return this.patient&&this.patient.type==='child'; },
     initials()    { return this.patient?patientInitials(this.patient.name):'?'; },
@@ -388,37 +388,7 @@ const PatientProfile = {
     },
     ci(n)  { return patientInitials(n); },
     ca(n)  { return patientAvatarClass(n); },
-    fmtEncDate(d) { return fmtDateShort(d); },
-    isDocOrSuper() { return ['doctor','superuser'].includes(this.$root.role); },
-    isSuperUser()  { return this.$root.role === 'superuser'; },
-    async doArchive() {
-      if (!confirm('Archive this patient? They will be hidden from search. You can restore them anytime.')) return;
-      await archivePatient(this.patient.id);
-      this.patient = { ...this.patient, archived: true };
-    },
-    async doRestore() {
-      await restorePatient(this.patient.id);
-      this.patient = { ...this.patient, archived: false };
-    },
-    async openDeleteModal() {
-      this._linkedCount = await getPatientLinkedCount(this.patient.id);
-      this._deleteReason = ''; this._deleteConfirm = '';
-      this._showDeleteModal = true;
-    },
-    async _confirmDelete() {
-      if (this._deleteConfirm.trim().toLowerCase() !== (this.patient ? this.patient.name.toLowerCase() : '')) {
-        alert('Name does not match. Please type the patient name exactly.');
-        return;
-      }
-      if (!this._deleteReason.trim()) { alert('Please enter a reason.'); return; }
-      this._deleting = true;
-      try {
-        await hardDeletePatient(this.patient, this._deleteReason);
-        this._showDeleteModal = false;
-        this.$router.push('/patients');
-      } catch(e) { alert('Error: ' + e.message); }
-      finally { this._deleting = false; }
-    }
+    fmtEncDate(d) { return fmtDateShort(d); }
   },
   mounted() { this.loadPatient(); },
   watch: { '$route.params.id'() { this.loadPatient(); } },
@@ -563,49 +533,11 @@ const PatientProfile = {
           </div>
         </template>
 
-      <!-- DANGER ZONE -->
-      <div class="danger-zone" v-if="!loading && patient && isDocOrSuper()" style="margin:16px">
-        <div class="danger-zone-title"><i class="ti ti-alert-triangle"></i> Danger zone</div>
-        <div class="danger-zone-row">
-          <button class="dz-btn dz-archive" v-if="!patient.archived" @click="doArchive()"><i class="ti ti-archive"></i> Archive patient</button>
-          <button class="dz-btn dz-restore" v-if="patient.archived"  @click="doRestore()"><i class="ti ti-archive-off"></i> Restore patient</button>
-          <button class="dz-btn dz-delete"  v-if="isSuperUser()" @click="openDeleteModal"><i class="ti ti-trash"></i> Delete permanently</button>
-        </div>
-      </div>
-
-      <!-- DELETE MODAL -->
-      <div class="modal-overlay" v-if="_showDeleteModal" @click.self="_showDeleteModal=false">
-        <div class="modal-box">
-          <div class="modal-title"><i class="ti ti-trash" style="color:var(--red-mid)"></i> Delete patient permanently</div>
-          <div class="modal-body">All records for <strong>{{ patient ? patient.name : '' }}</strong> will be permanently erased.</div>
-          <div class="modal-warn" v-if="_linkedCount && _linkedCount.total>0">
-            Will also delete: {{ _linkedCount.followups }} follow-ups, {{ _linkedCount.invoices }} invoices,
-            {{ _linkedCount.encounters }} encounters, {{ _linkedCount.children }} child records
-            (<strong>{{ _linkedCount.total }} linked records total</strong>).
-          </div>
-          <div class="form-group" style="margin-bottom:12px">
-            <label class="form-label">Reason <span class="form-required">*</span></label>
-            <input type="text" v-model="_deleteReason" class="form-input" placeholder="Why is this record being deleted?" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Type patient name to confirm: <strong>{{ patient ? patient.name : '' }}</strong></label>
-            <input type="text" v-model="_deleteConfirm" class="form-input" />
-          </div>
-          <div class="modal-actions">
-            <button class="btn btn-secondary" @click="_showDeleteModal=false">Cancel</button>
-            <button class="btn" style="background:var(--red-mid);color:white;border-color:var(--red-mid)"
-              :disabled="_deleting||!_deleteReason.trim()||_deleteConfirm.trim().toLowerCase()!==(patient?patient.name.toLowerCase():'')"
-              @click="_confirmDelete()">
-              {{ _deleting ? 'Deleting\u2026' : 'Delete permanently' }}
-            </button>
-          </div>
-        </div>
-      </div>
-
       </div>
     </div>
   `
 };
+
 
 // ================================================================
 //  STEP 5: FOLLOW-UP CREATION
@@ -912,8 +844,7 @@ const FollowupDetail = {
     today()              { return todayIso(); },
     actionableReminders(){ return this.reminders.filter(r => r.status === 'pending' && r.reminderDate <= this.today); },
     hasReminders()       { return this.reminders.length > 0; },
-    outcomeOptions()     { return CONTACT_OUTCOMES; },
-    isSuperUser()        { return this.$root.role === 'superuser'; }
+    outcomeOptions()     { return CONTACT_OUTCOMES; }
   },
   methods: {
     async load() {
@@ -1003,13 +934,6 @@ const FollowupDetail = {
     reminderLabel(r) {
       if (r.daysBeforeDue === 1) return '1 day before';
       return r.daysBeforeDue + ' days before';
-    },
-    async deleteCase() {
-      const reason = prompt('Reason for deleting this follow-up case:');
-      if (!reason) return;
-      if (!confirm('Delete this case and all its reminders and contact logs permanently?')) return;
-      try { await deleteFollowupCase(this.fc, reason); this.$router.push('/followups'); }
-      catch(e) { alert('Error: ' + e.message); }
     }
   },
   mounted() { this.load(); },
@@ -1778,127 +1702,149 @@ const NewAppointment = {
 //  DASHBOARD — tile home screen
 // ================================================================
 
+// ================================================================
+//  DASHBOARD  (landing screen)
+// ================================================================
+
 const Dashboard = {
   name: 'Dashboard',
   data() {
     return {
       stats: null, loading: true,
-      apptTotal: 0, apptSeen: 0, apptWaiting: 0
+      reminders: [], recentInvoices: [], todayAppts: [],
+      loadingQ: true, loadingInv: true, loadingAppts: true
     };
   },
   computed: {
     greeting() {
       const h = new Date().getHours();
-      return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-    },
-    firstName() {
-      return (this.$root.userName || (this.$root.user||{}).displayName || '').split(' ')[0] || 'there';
+      if (h < 12) return 'Good morning';
+      if (h < 17) return 'Good afternoon';
+      return 'Good evening';
     },
     todayLabel() {
       return new Date().toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
     },
-    role()        { return this.$root.role; },
-    isDoctor()    { return this.$root.role==='doctor' || this.$root.role==='superuser'; },
-    overdueCount(){ return this.stats ? this.stats.overdueCount : 0; }
+    role()      { return this.$root.role; },
+    firstName() {
+      const n = this.$root.userName || (this.$root.user && this.$root.user.displayName) || '';
+      return n.split(' ')[0] || 'there';
+    }
   },
   methods: {
     async loadAll() {
-      this.loading = true;
-      try {
-        const [stats, appts] = await Promise.all([
-          getDashboardStats(this.$root.role),
-          getTodayAppointments()
-        ]);
-        this.stats       = stats;
-        this.apptTotal   = appts.length;
-        this.apptSeen    = appts.filter(a => a.status === 'seen').length;
-        this.apptWaiting = appts.filter(a => a.status === 'scheduled').length;
-      } catch(e) { console.error(e); }
-      finally { this.loading = false; }
+      this.loading = true; this.loadingQ = true; this.loadingInv = true; this.loadingAppts = true;
+      getDashboardStats(this.$root.role)
+        .then(s => { this.stats = s; }).finally(() => { this.loading = false; });
+      getTodaysPendingReminders()
+        .then(r => { this.reminders = r.slice(0,6); }).finally(() => { this.loadingQ = false; });
+      getTodayAppointments()
+        .then(a => { this.todayAppts = a; }).finally(() => { this.loadingAppts = false; });
+      if (this.$root.role === 'doctor') {
+        getRecentInvoicesForDashboard()
+          .then(inv => { this.recentInvoices = inv; }).finally(() => { this.loadingInv = false; });
+      } else { this.loadingInv = false; }
     },
-    go(p)     { this.$router.push(p); },
-    fmtAmt(n) { return fmtAmount(n); }
+    async markSent(r) {
+      await updateReminderStatus(r.id, 'sent');
+      this.reminders = this.reminders.filter(x => x.id !== r.id);
+      if (this.stats) this.stats.pendingToday = Math.max(0, this.stats.pendingToday - 1);
+    },
+    waLink(r)   { return buildReminderWaLink(r); },
+    fmtAmt(n)   { return fmtAmount(n); },
+    fmtDate(d)  { return fmtDateShort(d); },
+    pillCls(t)  { return {anc:'pill-teal',vaccination:'pill-blue',post_procedure:'pill-gray',annual_recall:'pill-gray'}[t]||'pill-gray'; },
+    pillTxt(t)  { return {anc:'ANC',vaccination:'Vaccine',post_procedure:'Post-op',annual_recall:'Recall'}[t]||'Follow-up'; },
+    initials(n) { return patientInitials(n); }
   },
   mounted() { this.loadAll(); },
   template: `
     <div class="screen">
-      <div class="content" style="overflow-y:auto">
-        <div style="max-width:1060px;margin:0 auto">
-
-        <div class="home-hi">{{ greeting }}, {{ firstName }}</div>
-        <div class="home-date">{{ todayLabel }}</div>
-
-        <!-- Quick actions -->
-        <div class="home-actions">
-        <button class="home-action ha-primary" @click="go('/appointments/new')"><i class="ti ti-calendar-plus"></i> Book appointment</button>
-        <button class="home-action" @click="go('/patients/new')"><i class="ti ti-user-plus"></i> New patient</button>
-        <button class="home-action" @click="go('/followups/new')"><i class="ti ti-calendar-check"></i> New follow-up</button>
-        <button class="home-action" @click="go('/encounters/new')"><i class="ti ti-stethoscope"></i> New encounter</button>
-        <button class="home-action" @click="go('/billing/new')"><i class="ti ti-receipt"></i> New invoice</button>
-      </div>
-
-      <!-- Tile grid -->
-      <div class="tile-grid">
-        <div class="tile t-coral" @click="go('/appointments')">
-          <div class="tile-num">{{ loading ? '\u2026' : apptWaiting }}</div>
-          <div>
-            <div class="tile-label">Appointments today</div>
-            <div class="tile-sub">{{ apptSeen }} seen \u00b7 {{ apptTotal }} total</div>
+      <div class="content">
+        <div class="dash-header">
+          <div class="dash-greeting">{{ greeting }}, {{ firstName }}</div>
+          <div class="dash-date">{{ todayLabel }}</div>
+        </div>
+        <div class="dash-stats" v-if="stats || loading || !loadingAppts">
+          <div class="dash-stat teal">
+            <div class="dash-stat-label">Appointments today</div>
+            <div class="dash-stat-value">{{ loadingAppts ? '\u2014' : todayAppts.filter(a=>a.status==='scheduled').length }}</div>
+            <div class="dash-stat-sub">{{ loadingAppts ? '' : todayAppts.length + ' booked total' }}</div>
+          </div>
+          <div class="dash-stat">
+            <div class="dash-stat-label">Reminders today</div>
+            <div class="dash-stat-value" style="font-size:22px">{{ loading ? '\u2014' : (stats ? stats.pendingToday : 0) }}</div>
+            <div class="dash-stat-sub">Pending to send</div>
+          </div>
+          <div class="dash-stat amber">
+            <div class="dash-stat-label">Overdue cases</div>
+            <div class="dash-stat-value">{{ loading ? '\u2014' : (stats ? stats.overdueCount : 0) }}</div>
+            <div class="dash-stat-sub">Past due date</div>
+          </div>
+          <div class="dash-stat blue">
+            <div class="dash-stat-label">New this month</div>
+            <div class="dash-stat-value">{{ loading ? '\u2014' : (stats ? stats.monthPatients : 0) }}</div>
+            <div class="dash-stat-sub">Patients registered</div>
+          </div>
+          <div class="dash-stat" v-if="role==='doctor'">
+            <div class="dash-stat-label">Today\u2019s revenue</div>
+            <div class="dash-stat-value" style="font-size:20px;color:var(--teal-mid)">{{ loading ? '\u2014' : fmtAmt(stats ? stats.todayRevenue : 0) }}</div>
+            <div class="dash-stat-sub">{{ !loading && stats ? stats.todayInvoiceCount + ' invoice' + (stats.todayInvoiceCount===1?'':'s') : '' }}</div>
           </div>
         </div>
-        <div class="tile t-amber" @click="go('/followups')">
-          <div class="tile-num">{{ loading ? '\u2026' : (stats ? stats.pendingToday : 0) }}</div>
-          <div>
-            <div class="tile-label">Reminders today</div>
-            <div class="tile-sub">WhatsApp messages pending</div>
+        <div class="dash-actions">
+          <button class="dash-action-btn primary" @click="$router.push('/appointments/new')"><i class="ti ti-calendar-plus"></i> Book appointment</button>
+          <button class="dash-action-btn" @click="$router.push('/patients/new')"><i class="ti ti-user-plus"></i> New patient</button>
+          <button class="dash-action-btn" @click="$router.push('/followups/new')"><i class="ti ti-calendar-check"></i> New follow-up</button>
+          <button class="dash-action-btn" @click="$router.push('/encounters/new')"><i class="ti ti-stethoscope"></i> New encounter</button>
+          <button class="dash-action-btn" @click="$router.push('/billing/new')"><i class="ti ti-receipt"></i> New invoice</button>
+        </div>
+        <div class="dash-cols">
+          <div class="dash-panel">
+            <div class="dash-panel-header">
+              <span class="dash-panel-title"><i class="ti ti-brand-whatsapp" style="color:var(--teal-mid)"></i> Today\u2019s reminders</span>
+              <button class="dash-panel-link" @click="$router.push('/followups')">View all \u2192</button>
+            </div>
+            <div class="loading-wrap" style="padding:24px" v-if="loadingQ"><i class="ti ti-loader spin"></i></div>
+            <div class="dash-panel-empty" v-else-if="reminders.length===0"><i class="ti ti-circle-check" style="font-size:22px;color:var(--teal-mid)"></i><br>All clear \u2014 no pending reminders</div>
+            <template v-else>
+              <div class="dash-panel-row" v-for="r in reminders" :key="r.id">
+                <div class="avatar avatar-sm" :class="pillCls(r.followupType)==='pill-teal'?'avatar-teal':'avatar-blue'">{{ initials(r.patientName) }}</div>
+                <div style="flex:1;min-width:0"><div style="font-weight:500;font-size:13px">{{ r.patientName }}</div><div style="font-size:11px;color:var(--text-muted)">{{ r.subType }}</div></div>
+                <span class="pill" :class="pillCls(r.followupType)" style="font-size:10px;flex-shrink:0">{{ pillTxt(r.followupType) }}</span>
+                <a v-if="waLink(r)" :href="waLink(r)" target="_blank" class="action-btn action-btn-wa" style="flex-shrink:0"><i class="ti ti-brand-whatsapp"></i></a>
+                <button class="action-btn" style="flex-shrink:0;border-color:var(--teal-border);color:var(--teal-mid)" @click="markSent(r)"><i class="ti ti-check"></i></button>
+              </div>
+            </template>
           </div>
-        </div>
-        <div class="tile t-blue" @click="go('/followups')">
-          <div class="tile-num">{{ loading ? '\u2026' : overdueCount }}</div>
-          <div>
-            <div class="tile-label">Overdue follow-ups</div>
-            <div class="tile-sub">Need a call today</div>
+          <div class="dash-panel" v-if="role==='doctor'">
+            <div class="dash-panel-header">
+              <span class="dash-panel-title"><i class="ti ti-receipt" style="color:var(--teal-mid)"></i> Recent invoices</span>
+              <button class="dash-panel-link" @click="$router.push('/billing')">View all \u2192</button>
+            </div>
+            <div class="loading-wrap" style="padding:24px" v-if="loadingInv"><i class="ti ti-loader spin"></i></div>
+            <div class="dash-panel-empty" v-else-if="recentInvoices.length===0">No invoices yet</div>
+            <template v-else>
+              <div class="dash-panel-row" v-for="inv in recentInvoices" :key="inv.id" style="cursor:pointer" @click="$router.push('/billing/'+inv.id)">
+                <div style="flex:1;min-width:0"><div style="font-weight:500;font-size:13px">{{ inv.patientName }}</div><div style="font-size:11px;color:var(--text-muted)">{{ inv.invoiceNumber }} \u00b7 {{ fmtDate(inv.date) }}</div></div>
+                <div style="font-weight:600;color:var(--teal-mid);flex-shrink:0">{{ fmtAmt(inv.totalAmount) }}</div>
+              </div>
+            </template>
           </div>
-        </div>
-        <div class="tile t-teal" @click="go('/patients')">
-          <div class="tile-num">{{ loading ? '\u2026' : (stats ? stats.monthPatients : 0) }}</div>
-          <div>
-            <div class="tile-label">New patients</div>
-            <div class="tile-sub">Registered this month</div>
+          <div class="dash-panel" v-else>
+            <div class="dash-panel-header">
+              <span class="dash-panel-title"><i class="ti ti-calendar" style="color:var(--teal-mid)"></i> Today\u2019s appointments</span>
+              <button class="dash-panel-link" @click="$router.push('/appointments')">View all \u2192</button>
+            </div>
+            <div class="loading-wrap" style="padding:20px" v-if="loadingAppts"><i class="ti ti-loader spin"></i></div>
+            <div class="dash-panel-empty" v-else-if="todayAppts.length===0"><i class="ti ti-calendar" style="font-size:20px;opacity:.4"></i><br>No appointments today</div>
+            <template v-else>
+              <div class="dash-panel-row" v-for="a in todayAppts.slice(0,6)" :key="a.id">
+                <div style="flex:1;min-width:0"><div style="font-weight:500;font-size:13px">{{ a.patientName }}<span class="walkin-badge" v-if="a.isWalkIn">Walk-in</span></div><div style="font-size:11px;color:var(--text-muted)">{{ a.doctorName }}</div></div>
+                <span class="pill" :class="{scheduled:'pill-teal',seen:'pill-green',no_show:'pill-amber',cancelled:'pill-gray'}[a.status]||'pill-gray'" style="font-size:10px;flex-shrink:0">{{ {scheduled:'Scheduled',seen:'Seen',no_show:'No-show',cancelled:'Cancelled'}[a.status]||a.status }}</span>
+              </div>
+            </template>
           </div>
-        </div>
-        <div class="tile t-dark" @click="go('/billing')">
-          <div class="tile-num sm" v-if="isDoctor">{{ loading ? '\u2026' : fmtAmt(stats ? stats.todayRevenue : 0) }}</div>
-          <div class="tile-num sm" v-else>\u2192</div>
-          <div>
-            <div class="tile-label">Billing</div>
-            <div class="tile-sub" v-if="isDoctor">Today\u2019s collections</div>
-            <div class="tile-sub" v-else>Create or view invoices</div>
-          </div>
-        </div>
-        <div class="tile t-mauve" @click="go(isDoctor ? '/analytics' : '/patients')">
-          <div class="tile-num sm">\u2192</div>
-          <div>
-            <div class="tile-label" v-if="isDoctor">Reports</div>
-            <div class="tile-sub"  v-if="isDoctor">Revenue \u00b7 compliance</div>
-            <div class="tile-label" v-else>All patients</div>
-            <div class="tile-sub"  v-else>Search or register</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Urgent strip -->
-      <div class="urgent-strip" v-if="!loading && overdueCount > 0">
-        <i class="ti ti-alert-triangle"></i>
-        <div>
-          <strong>{{ overdueCount }} overdue follow-up{{ overdueCount===1?'':'s' }}</strong>
-          need attention today
-        </div>
-        <button class="btn btn-secondary btn-sm" style="margin-left:auto;flex-shrink:0" @click="go('/followups')">
-          View \u2192
-        </button>
-      </div>
-
         </div>
       </div>
     </div>
@@ -2599,14 +2545,7 @@ const InvoiceDetail = {
     fmtDate(d)     { return fmtDateShort(d); },
     modeLabel(m)   { return PAYMENT_MODE_LABELS[m]||m||'\u2014'; },
     typeLabel(t)   { return INVOICE_TYPE_LABELS[t]||t||'\u2014'; },
-    fmtTs(ts)      { if(!ts||!ts.toDate) return '\u2014'; return ts.toDate().toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); },
-    async deleteInvoice() {
-      const reason = prompt('Reason for deleting invoice ' + (this.invoice ? this.invoice.invoiceNumber : '') + ':');
-      if (!reason) return;
-      if (!confirm('Permanently delete this invoice? Cannot be undone.')) return;
-      try { await hardDeleteInvoice(this.invoice, reason); this.$router.push('/billing'); }
-      catch(e) { alert('Error: ' + e.message); }
-    }
+    fmtTs(ts)      { if(!ts||!ts.toDate) return '\u2014'; return ts.toDate().toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }
   },
   mounted() { this.load(); },
   template: `
@@ -2622,7 +2561,6 @@ const InvoiceDetail = {
         <div class="topbar-right" v-if="invoice">
           <button class="btn btn-secondary" @click="print"><i class="ti ti-printer"></i> Print</button>
           <button class="btn btn-secondary" @click="startEdit" v-if="!editing"><i class="ti ti-edit"></i> Edit invoice</button>
-          <button class="btn" style="background:var(--red-mid);color:white;border:none" v-if="$root.role==='superuser'" @click="deleteInvoice()"><i class="ti ti-trash"></i> Delete</button>
         </div>
       </div>
       <div class="content">
@@ -2852,59 +2790,6 @@ const Reconciliation = {
 // ================================================================
 //  AUDIT LOG SCREEN (superuser only)
 // ================================================================
-
-const AuditLog = {
-  name: 'AuditLog',
-  data() { return { log: [], loading: true }; },
-  methods: {
-    async load() {
-      this.loading = true;
-      try { this.log = await getAuditLog(100); }
-      catch(e) { console.error(e); }
-      finally { this.loading = false; }
-    },
-    fmtTs(ts) {
-      if (!ts || !ts.toDate) return '\u2014';
-      return ts.toDate().toLocaleString('en-IN',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
-    }
-  },
-  mounted() { this.load(); },
-  template: `
-    <div class="screen">
-      <div class="topbar">
-        <div class="topbar-left">
-          <div class="topbar-breadcrumb">
-            <button class="btn btn-secondary btn-sm" @click="$router.push('/dashboard')"><i class="ti ti-arrow-left"></i> Home</button>
-            <span class="sep">/</span><span class="current">Audit log</span>
-          </div>
-        </div>
-      </div>
-      <div class="content">
-        <div class="loading-wrap" v-if="loading"><i class="ti ti-loader spin"></i> Loading\u2026</div>
-        <div class="empty-section" v-else-if="log.length===0">
-          <i class="ti ti-clipboard-check"></i><p>No deletions recorded yet</p>
-        </div>
-        <div class="section-card" v-else>
-          <div class="audit-row" v-for="entry in log" :key="entry.id">
-            <div style="display:flex;align-items:center;gap:10px">
-              <span class="audit-entity">{{ entry.entity }}</span>
-              <span class="td-mono" style="font-size:12px">{{ entry.entityId }}</span>
-              <span class="pill pill-red" style="font-size:10px">Deleted</span>
-            </div>
-            <div class="audit-meta">{{ fmtTs(entry.deletedAt) }} \u00b7 by {{ entry.deletedBy }}</div>
-            <div class="audit-reason">Reason: {{ entry.reason }}</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `
-};
-
-
-// ================================================================
-//  ANALYTICS / REPORTS SCREEN  (Step 12)
-// ================================================================
-
 const Analytics = {
   name: 'Analytics',
   data() {
@@ -3048,7 +2933,6 @@ const router = VueRouter.createRouter({
     { path:'/dashboard',          component:Dashboard },
     { path:'/appointments',        component:Appointments },
     { path:'/appointments/new',   component:NewAppointment },
-    { path:'/audit-log',          component:AuditLog },
     { path:'/patients',           component:PatientSearch },
     { path:'/patients/new',       component:NewPatient },
     { path:'/patients/:id',       component:PatientProfile },
@@ -3085,12 +2969,22 @@ const App = {
   components: { Login },
   data() { return { user:null, role:null, userName:null, authChecked:false, whitelistError:false }; },
   computed: {
-    userInitials() {
-      const n = this.userName || (this.user && this.user.displayName) || '?';
-      return n.trim().split(/\s+/).slice(0,2).map(x=>x[0].toUpperCase()).join('');
+    section() {
+      const p=this.$route.path;
+      if (p.startsWith('/patients'))       return 'patients';
+      if (p.startsWith('/followups'))      return 'followups';
+      if (p.startsWith('/billing'))        return 'billing';
+      if (p.startsWith('/reconciliation')) return 'reconciliation';
+      if (p.startsWith('/analytics'))      return 'analytics';
+      if (p.startsWith('/config'))         return 'config';
+      if (p.startsWith('/dashboard'))      return 'dashboard';
+      if (p.startsWith('/appointments'))   return 'appointments';
+      return 'dashboard';
     },
-    isDoctor()  { return this.role==='doctor' || this.role==='superuser'; },
-    isSuper()   { return this.role==='superuser'; }
+    userInitials() {
+      if (!this.user||!this.user.displayName) return '?';
+      return this.user.displayName.trim().split(/\s+/).slice(0,2).map(n=>n[0].toUpperCase()).join('');
+    }
   },
   methods: { async signOut() { await signOutUser(); } },
   mounted() {
@@ -3120,35 +3014,32 @@ const App = {
       <div class="auth-loading" v-if="!authChecked"><i class="ti ti-loader spin" style="font-size:28px;color:var(--teal-mid)"></i></div>
       <Login v-else-if="!user" :whitelist-error="whitelistError" />
       <div class="layout" v-else>
-        <div class="main-area">
-          <div class="cms-topbar">
-            <div class="cms-brand" @click="$router.push('/dashboard')">
-              <div class="cms-brand-mark">A</div>
-              <div class="cms-brand-name">Aangan Clinic</div>
+        <aside class="sidebar">
+          <div class="sidebar-logo"><span class="sidebar-name">Aangan Clinic</span><span class="sidebar-sub">Women’s health centre</span></div>
+          <nav class="sidebar-nav">
+            <button class="nav-btn" :class="{on:section==='dashboard'}"      @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Dashboard</button>
+            <button class="nav-btn" :class="{on:section==='appointments'}"   @click="$router.push('/appointments')"><i class="ti ti-calendar"></i> Appointments</button>
+            <button class="nav-btn" :class="{on:section==='followups'}"      @click="$router.push('/followups')"><i class="ti ti-calendar-check"></i> Follow-ups</button>
+            <button class="nav-btn" :class="{on:section==='patients'}"       @click="$router.push('/patients')"><i class="ti ti-users"></i> Patients</button>
+            <button class="nav-btn" :class="{on:section==='billing'}"        @click="$router.push('/billing')"><i class="ti ti-receipt"></i> Billing</button>
+            <button class="nav-btn" v-if="role==='doctor'" :class="{on:section==='reconciliation'}" @click="$router.push('/reconciliation')"><i class="ti ti-chart-bar"></i> Reconciliation</button>
+            <button class="nav-btn" v-if="role==='doctor'" :class="{on:section==='analytics'}"      @click="$router.push('/analytics')"><i class="ti ti-chart-line"></i> Reports</button>
+            <button class="nav-btn" v-if="role==='doctor'" :class="{on:section==='config'}"         @click="$router.push('/config')"><i class="ti ti-settings"></i> Settings</button>
+          </nav>
+          <div class="sidebar-footer">
+            <div class="sidebar-user">
+              <img v-if="user.photoURL" :src="user.photoURL" class="sidebar-user-avatar" referrerpolicy="no-referrer" />
+              <div class="sidebar-user-avatar-placeholder" v-else>{{ userInitials }}</div>
+              <div style="min-width:0"><div class="sidebar-user-name">{{ userName||user.displayName||'Staff' }}</div><div class="sidebar-user-email">{{ user.email }}</div><div class="sidebar-user-role">{{ role==='doctor'?'Doctor':'Staff' }}</div></div>
             </div>
-            <div class="cms-topbar-right">
-              <span class="role-badge" :class="'role-'+(role||'staff')">{{ role==='superuser'?'Superuser':role==='doctor'?'Doctor':'Staff' }}</span>
-              <button class="cms-home-btn" @click="$router.push('/dashboard')"><i class="ti ti-home"></i> Home</button>
-              <div class="cms-user">
-                <img v-if="user.photoURL" :src="user.photoURL" class="cms-ava" referrerpolicy="no-referrer" />
-                <div v-else class="cms-ava">{{ userInitials }}</div>
-                <span class="cms-uname">{{ userName||user.displayName||'Staff' }}</span>
-              </div>
-              <button class="cms-signout" @click="signOut">Sign out</button>
-            </div>
+            <button class="sign-out-btn" @click="signOut"><i class="ti ti-logout"></i> Sign out</button>
           </div>
-          <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column">
-            <router-view />
-          </div>
-        </div>
+        </aside>
+        <main class="main-area"><router-view></router-view></main>
       </div>
     </div>
   `
 };
-
-// ================================================================
-//  MOUNT
-// ================================================================
 
 const app = createApp(App);
 app.use(router);
