@@ -3048,7 +3048,7 @@ const router = VueRouter.createRouter({
 
 router.beforeEach((to, from, next) => {
   const doctorOnly = ['/analytics', '/reconciliation', '/config'];
-  if (doctorOnly.some(p => to.path.startsWith(p)) && window._appRole !== 'doctor') {
+  if (doctorOnly.some(p => to.path.startsWith(p)) && window._appRole !== 'doctor' && window._appRole !== 'superuser') {
     next('/dashboard');
   } else {
     next();
@@ -3138,10 +3138,10 @@ const App = {
                 <span class="role-badge" :class="'role-'+(role||'staff')" style="margin-top:4px">{{ role==='doctor'?'Doctor':'Staff' }}</span>
               </div>
               <div class="profile-menu-divider"></div>
-              <button class="profile-menu-item" v-if="role==='doctor'" @click="showProfileMenu=false; $router.push('/analytics')"><i class="ti ti-chart-line"></i> Reports</button>
-              <button class="profile-menu-item" v-if="role==='doctor'" @click="showProfileMenu=false; $router.push('/config')"><i class="ti ti-settings"></i> Settings</button>
-              <button class="profile-menu-item" v-if="role==='doctor'" @click="showProfileMenu=false; $router.push('/reconciliation')"><i class="ti ti-chart-bar"></i> Reconciliation</button>
-              <div class="profile-menu-divider" v-if="role==='doctor'"></div>
+              <button class="profile-menu-item" v-if="role==='doctor'||role==='superuser'" @click="showProfileMenu=false; $router.push('/analytics')"><i class="ti ti-chart-line"></i> Reports</button>
+              <button class="profile-menu-item" v-if="role==='doctor'||role==='superuser'" @click="showProfileMenu=false; $router.push('/config')"><i class="ti ti-settings"></i> Settings</button>
+              <button class="profile-menu-item" v-if="role==='doctor'||role==='superuser'" @click="showProfileMenu=false; $router.push('/reconciliation')"><i class="ti ti-chart-bar"></i> Reconciliation</button>
+              <div class="profile-menu-divider" v-if="role==='doctor'||role==='superuser'"></div>
               <button class="profile-menu-item red" @click="signOut"><i class="ti ti-logout"></i> Sign out</button>
             </div>
           </template>
