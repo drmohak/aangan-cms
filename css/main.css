@@ -1964,3 +1964,55 @@ input, select, textarea, button {
   gap: 5px;
   flex-shrink: 0;
 }
+
+/* -----------------------------------------------
+   STEP 16 — DASHBOARD GRADIENT STAT CARDS
+----------------------------------------------- */
+
+/* Base gradient card — overrides flat style */
+.dash-stat {
+  background: linear-gradient(140deg, #52796f 0%, #354f52 100%) !important;
+  border: none !important;
+  border-radius: 16px !important;
+  padding: 20px 20px 16px !important;
+  min-height: 120px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+}
+.dash-stat::before { display: none !important; }
+
+/* All text white on gradient cards */
+.dash-stat .dash-stat-label {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: rgba(255,255,255,.75) !important;
+  text-transform: uppercase !important;
+  letter-spacing: .07em !important;
+}
+.dash-stat .dash-stat-value {
+  font-size: 56px !important;
+  font-weight: 700 !important;
+  color: white !important;
+  line-height: 1 !important;
+  letter-spacing: -2px !important;
+  margin-top: 8px !important;
+}
+.dash-stat .dash-stat-sub {
+  font-size: 12px !important;
+  color: rgba(255,255,255,.65) !important;
+  margin-top: 6px !important;
+}
+
+/* Gradient variants */
+.dash-stat.teal      { background: linear-gradient(140deg, #2a9d8f 0%, #1a7a6e 100%) !important; }
+.dash-stat.amber     { background: linear-gradient(140deg, #e76f51 0%, #c45639 100%) !important; }
+.dash-stat.blue      { background: linear-gradient(140deg, #457b9d 0%, #2d5f80 100%) !important; }
+.dash-stat.stat-warm { background: linear-gradient(140deg, #e9a82a 0%, #c47a0e 100%) !important; }
+.dash-stat.stat-dark { background: linear-gradient(140deg, #264653 0%, #1a3040 100%) !important; }
+
+/* Override the colored value rule from old CSS */
+.dash-stat.teal  .dash-stat-value,
+.dash-stat.amber .dash-stat-value,
+.dash-stat.red   .dash-stat-value,
+.dash-stat.blue  .dash-stat-value { color: white !important; }

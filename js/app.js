@@ -1836,9 +1836,9 @@ const Dashboard = {
             <div class="dash-stat-value">{{ loadingAppts ? '\u2014' : todayAppts.filter(a=>a.status==='scheduled').length }}</div>
             <div class="dash-stat-sub">{{ loadingAppts ? '' : todayAppts.length + ' booked total' }}</div>
           </div>
-          <div class="dash-stat" @click="$router.push('/followups')" style="cursor:pointer">
+          <div class="dash-stat stat-warm" @click="$router.push('/followups')" style="cursor:pointer">
             <div class="dash-stat-label">Reminders today</div>
-            <div class="dash-stat-value" style="font-size:22px">{{ loading ? '\u2014' : (stats ? stats.pendingToday : 0) }}</div>
+            <div class="dash-stat-value">{{ loading ? '\u2014' : (stats ? stats.pendingToday : 0) }}</div>
             <div class="dash-stat-sub">Pending to send</div>
           </div>
           <div class="dash-stat amber" @click="$router.push('/followups')" style="cursor:pointer">
@@ -1851,7 +1851,7 @@ const Dashboard = {
             <div class="dash-stat-value">{{ loading ? '\u2014' : (stats ? stats.monthPatients : 0) }}</div>
             <div class="dash-stat-sub">Patients registered</div>
           </div>
-          <div class="dash-stat" v-if="role==='doctor'" @click="$router.push('/billing')" style="cursor:pointer">
+          <div class="dash-stat stat-dark" v-if="role==='doctor'" @click="$router.push('/billing')" style="cursor:pointer">
             <div class="dash-stat-label">Today\u2019s revenue</div>
             <div class="dash-stat-value" style="font-size:20px;color:var(--teal-mid)">{{ loading ? '\u2014' : fmtAmt(stats ? stats.todayRevenue : 0) }}</div>
             <div class="dash-stat-sub">{{ !loading && stats ? stats.todayInvoiceCount + ' invoice' + (stats.todayInvoiceCount===1?'':'s') : '' }}</div>
