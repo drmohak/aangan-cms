@@ -4,7 +4,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 14px;
   color: #1a1a1a;
   background: #f0f0f0;
@@ -1898,3 +1898,69 @@ button { font-family: inherit; cursor: pointer; }
 .profile-menu-item:hover { background:var(--bg); color:var(--text-primary); }
 .profile-menu-item.red   { color:#dc2626; }
 .profile-menu-item.red:hover { background:#fff5f5; }
+
+/* -----------------------------------------------
+   STEP 15 — FIGTREE + READABILITY
+----------------------------------------------- */
+
+/* Ensure font cascades to all inputs and buttons */
+input, select, textarea, button {
+  font-family: 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Content text sizes up */
+.row-name         { font-size: 14px !important; }
+.row-detail       { font-size: 12px !important; }
+.td-name          { font-size: 14px !important; }
+.td-muted         { font-size: 13px !important; }
+.topbar h1        { font-size: 16px !important; }
+.topbar h2        { font-size: 15px !important; }
+.form-label       { font-size: 14px !important; }
+.form-input,
+.form-select      { font-size: 14px !important; }
+.section-title    { font-size: 14px !important; font-weight: 500; }
+.card-list-row    { padding: 11px 16px; }
+.info-label       { font-size: 12px !important; }
+.info-value       { font-size: 14px !important; }
+.dash-stat-label  { font-size: 12px !important; }
+.dash-stat-value  { font-size: 28px !important; }
+
+/* ── Three-column queue rows ── */
+.q-patient {
+  width: 210px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+.q-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.q-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.q-meta {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.q-due {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.q-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}

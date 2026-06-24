@@ -2068,12 +2068,20 @@ const FollowupList = {
                 <div class="card-list" style="margin-bottom:18px">
                   <div class="card-list-row" v-for="r in visibleR" :key="r.id">
                     <div class="avatar avatar-sm" :class="avCls(r.patientName)">{{ initials(r.patientName) }}</div>
-                    <div class="row-info"><div class="row-name">{{ r.patientName }}</div><div class="row-detail">{{ r.subType }} \u00b7 due {{ fmtDate(r.dueDate) }}</div></div>
-                    <span class="pill" :class="pillCls(r.followupType)" style="flex-shrink:0">{{ pillTxt(r.followupType) }}</span>
-                    <a v-if="waLink(r)" :href="waLink(r)" target="_blank" class="action-btn action-btn-wa"><i class="ti ti-brand-whatsapp"></i> Send</a>
-                    <span v-else class="pill pill-gray" style="font-size:10px">No WA</span>
-                    <button class="action-btn action-btn-call" @click="markSent(r)"><i class="ti ti-check"></i> Sent</button>
-                    <button class="action-btn" style="border-color:var(--border-mid);color:var(--text-muted)" @click="markSkipped(r)">Skip</button>
+                    <div class="q-patient">
+                      <div class="q-name">{{ r.patientName }}</div>
+                      <div class="q-sub">{{ r.subType }}</div>
+                    </div>
+                    <div class="q-meta">
+                      <span class="pill" :class="pillCls(r.followupType)">{{ pillTxt(r.followupType) }}</span>
+                      <span class="q-due">due {{ fmtDate(r.dueDate) }}</span>
+                    </div>
+                    <div class="q-actions">
+                      <a v-if="waLink(r)" :href="waLink(r)" target="_blank" class="action-btn action-btn-wa"><i class="ti ti-brand-whatsapp"></i> Send</a>
+                      <span v-else class="pill pill-gray" style="font-size:10px">No WA</span>
+                      <button class="action-btn action-btn-call" @click="markSent(r)"><i class="ti ti-check"></i> Sent</button>
+                      <button class="action-btn" style="border-color:var(--border-mid);color:var(--text-muted)" @click="markSkipped(r)">Skip</button>
+                    </div>
                   </div>
                   <div class="row-more" v-if="qReminders.length>5">
                     <button style="background:none;border:none;font-size:12px;color:var(--teal-mid);cursor:pointer" @click="showAllR=!showAllR">
@@ -2111,9 +2119,17 @@ const FollowupList = {
                 <div class="card-list">
                   <div class="card-list-row" v-for="fc in qHighRisk" :key="fc.id">
                     <div class="avatar avatar-sm avatar-red">{{ initials(fc.patientName) }}</div>
-                    <div class="row-info"><div class="row-name">{{ fc.patientName }}</div><div class="row-detail">{{ fc.subType }} \u00b7 was due {{ fmtDate(fc.dueDate) }}</div></div>
-                    <span class="pill pill-red" style="flex-shrink:0">{{ overdueText(fc._daysOver) }}</span>
-                    <button class="action-btn action-btn-flag" @click="$router.push('/followups/'+fc.id)"><i class="ti ti-flag"></i> Escalate</button>
+                    <div class="q-patient">
+                      <div class="q-name">{{ fc.patientName }}</div>
+                      <div class="q-sub">{{ fc.subType }}</div>
+                    </div>
+                    <div class="q-meta">
+                      <span class="pill pill-red">{{ overdueText(fc._daysOver) }}</span>
+                      <span class="q-due">was due {{ fmtDate(fc.dueDate) }}</span>
+                    </div>
+                    <div class="q-actions">
+                      <button class="action-btn action-btn-flag" @click="$router.push('/followups/'+fc.id)"><i class="ti ti-flag"></i> Escalate</button>
+                    </div>
                   </div>
                 </div>
               </template>
